@@ -101,4 +101,54 @@ describe('planning edits preserve task data', () => {
     await updateBlockTaskStatus(task, 'done')
     expect(block.content).toBe('DONE Latest title\nnotes:: new')
   })
+
+  test('sets, changes and clears size without rewriting dates, logs or unrelated metadata', async () => {
+    const content =
+      'DOING Task\nSCHEDULED: <2026-10-01 Thu>\nDEADLINE: <2026-10-08 Thu +1m>\n:AGENDA:\nestimated: 45m\nend: 2026-10-03\nbindObjectiveId: goal\ncustom: https://host:42/a\n:END:\n:LOGBOOK:\nCLOCK: [2026-10-01 Thu 09:00:00]--[2026-10-01 Thu 09:15:00] =>  00:15:00\n:END:\n\nnotes:: stay'
+    const { block } = mockBlock(content)
+    const initial = {
+      id: 'task',
+      title: 'Task',
+      status: 'todo',
+      start: dayjs('2026-10-01'),
+      end: dayjs('2026-10-03'),
+      deadline: { value: dayjs('2026-10-08'), allDay: true },
+      allDay: true,
+      estimatedTime: 45,
+      bindObjectiveId: 'goal',
+      project: { id: 'page' },
+    } as AgendaTaskWithStartOrDeadline
+    const large = { ...initial, projectId: 'page', size: 'L' as const }
+    await updateTaskBlock(large, initial)
+    expect(block.content).toBe(
+      content.replace('custom: https://host:42/a\n:END:', 'custom: https://host:42/a\nsize: L\n:END:'),
+    )
+    const small = { ...large, size: 'S' as const }
+    await updateTaskBlock(small, large)
+    expect(block.content).toContain('size: S')
+    await updateTaskBlock({ ...small, size: undefined }, small)
+    expect(block.content).toBe(content)
+  })
+
+  test('callers that omit size preserve it, including newer edits made outside Agenda', async () => {
+    const content = 'DOING Task\nSCHEDULED: <2026-10-01 Thu>\n:AGENDA:\nsize: XXL\n:END:'
+    const { block, update } = mockBlock(content)
+    const initial = {
+      id: 'task',
+      title: 'Task',
+      status: 'todo',
+      start: dayjs('2026-10-01'),
+      allDay: true,
+      project: { id: 'page' },
+      size: 'L',
+    } as AgendaTaskWithStartOrDeadline
+    await updateTaskBlock({ ...initial, projectId: 'page' }, initial)
+    expect(block.content).toBe(content)
+    const { size: _size, ...withoutSize } = initial
+    await updateTaskBlock({ ...withoutSize, projectId: 'page' }, initial)
+    expect(block.content).toBe(content)
+    update.mockRejectedValueOnce(new Error('offline'))
+    await expect(updateTaskBlock({ ...initial, size: 'S', projectId: 'page' }, initial)).rejects.toThrow('offline')
+    expect(block.content).toBe(content)
+  })
 })

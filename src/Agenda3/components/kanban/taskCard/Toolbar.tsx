@@ -14,6 +14,7 @@ import { DEFAULT_ESTIMATED_TIME } from '@/constants/agenda'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaTaskWithStart, AgendaTaskWithStartOrDeadline } from '@/types/task'
 
+import TaskSizeBadge from '../../TaskSizeBadge'
 import LogseqLogo from '../../icons/LogseqLogo'
 
 const Toolbar = ({
@@ -69,6 +70,7 @@ const Toolbar = ({
             <span>{getDaysBetween(dayjs(), task.deadline.value)}</span>
           </div>
         ) : null}
+        <TaskSizeBadge size={task.size} className="text-gray-500 dark:text-gray-300" />
         {/* Logseq icon */}
         <div
           className="cursor-pointer text-gray-300 opacity-0 transition-opacity group-hover/card:opacity-100 dark:text-gray-400"

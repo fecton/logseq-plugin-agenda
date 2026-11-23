@@ -70,3 +70,19 @@ test('rejects reversed multi-day ranges', async () => {
   await expect(result.current.edit()).rejects.toThrow('End date must not precede start date')
   expect(updateEntity).not.toHaveBeenCalled()
 })
+
+test('loads size, retains failed edits, resets cancelled changes and allows clearing it', async () => {
+  const task = { ...initial, start: dayjs('2026-11-24'), size: 'XL' as const }
+  const { result } = renderHook(() => useEdit(task, messages))
+  expect(result.current.formData.size).toBe('XL')
+  act(() => result.current.updateFormData({ size: 'M' }))
+  updateEntity.mockRejectedValueOnce(new Error('offline'))
+  await expect(result.current.edit()).rejects.toThrow('offline')
+  expect(result.current.formData.size).toBe('M')
+  expect(task.size).toBe('XL')
+  act(() => result.current.reset())
+  expect(result.current.formData.size).toBe('XL')
+  act(() => result.current.updateFormData({ size: undefined }))
+  await result.current.edit()
+  expect(updateEntity.mock.calls[1][0].data).toHaveProperty('size', undefined)
+})

@@ -7,6 +7,7 @@ import type { RRule } from './fullcalendar'
 import type { AgendaEntityObjective } from './objective'
 import type { AgendaProject } from './project'
 import type { TimeLog } from './task'
+import type { TaskSize } from './taskSize'
 
 export type AgendaEntity = {
   id: string // uuid
@@ -23,6 +24,7 @@ export type AgendaEntity = {
   filters?: Filter[]
   repeat?: string // from logseq scheduled
   estimatedTime?: number // unit: minute, from agenda drawer estimated
+  size?: TaskSize // relative task size, from agenda drawer size
   actualTime?: number // unit: minute
   timeLogs?: TimeLog[] // from logbook
   subtasks?: AgendaEntity[] // children blocks which are task

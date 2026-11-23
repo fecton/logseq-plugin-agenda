@@ -15,6 +15,7 @@ import {
 import type { AgendaEntity, AgendaEntityDeadline } from '@/types/entity'
 import type { AgendaObjective, AgendaEntityObjective } from '@/types/objective'
 import type { AgendaTaskWithStartOrDeadline, CreateAgendaTask } from '@/types/task'
+import { parseTaskSize, type TaskSize } from '@/types/taskSize'
 import { updateBlock } from '@/util/logseq'
 
 import { secondsToHHmmss } from './fullCalendar'
@@ -186,12 +187,13 @@ export const deleteBlogTimeLog = async (uuid: string, index: number) => {
  * create task
  */
 export const createTaskBlock = async (taskInfo: CreateAgendaTask) => {
-  const { title, allDay, start, deadline, end, estimatedTime, projectId, bindObjectiveId } = taskInfo
+  const { title, allDay, start, deadline, end, estimatedTime, projectId, bindObjectiveId, size } = taskInfo
 
   const AGENDA_DRAWER = genAgendaDrawerText({
     estimated: estimatedTime,
     end,
     bindObjectiveId,
+    size,
   })
   // const
   const content = [
@@ -235,7 +237,7 @@ export const updateTaskBlock = async (
   taskInfo: AgendaTaskWithStartOrDeadline & { projectId?: string },
   originalTask?: AgendaEntity,
 ) => {
-  const { id, title, allDay, start, end, estimatedTime, deadline, status, timeLogs, projectId, bindObjectiveId } =
+  const { id, title, allDay, start, end, estimatedTime, deadline, status, timeLogs, projectId, bindObjectiveId, size } =
     taskInfo
   const originalBlock = await logseq.Editor.getBlock(id)
   if (!originalBlock) return Promise.reject(new Error('Block not found'))
@@ -255,6 +257,7 @@ export const updateTaskBlock = async (
   if (changed(estimatedTime, originalTask?.estimatedTime)) drawer.estimated = estimatedTime
   if (changed(end, originalTask?.end)) drawer.end = end
   if (changed(bindObjectiveId, originalTask?.bindObjectiveId)) drawer.bindObjectiveId = bindObjectiveId
+  if ('size' in taskInfo && changed(size, originalTask?.size)) drawer.size = size
   content = updateBlockAgendaDrawer(content, drawer)
   if (changed(timeLogs ?? [], originalTask?.timeLogs ?? [])) content = updateBlockTimeLogText(content, timeLogs)
   await updateBlock(id, content)
@@ -353,7 +356,13 @@ export function genDurationString(minutes: number): string {
   return durationString
 }
 
-type AgendaDrawer = { estimated?: number; end?: Dayjs; objective?: AgendaEntityObjective; bindObjectiveId?: string }
+type AgendaDrawer = {
+  estimated?: number
+  end?: Dayjs
+  objective?: AgendaEntityObjective
+  bindObjectiveId?: string
+  size?: TaskSize
+}
 /**
  * parse agenda drawer
  */
@@ -388,6 +397,7 @@ export function parseAgendaDrawer(blockContent: string): AgendaDrawer | null {
           }
         }
         if (cur[0] === 'bindObjectiveId') return { ...acc, bindObjectiveId: cur[1] }
+        if (cur[0] === 'size') return { ...acc, size: parseTaskSize(cur[1]) }
         return { ...acc, [cur[0]]: cur[1] }
       }, {} as AgendaDrawer)
     : null
@@ -412,6 +422,9 @@ export function genAgendaDrawerText(drawer: AgendaDrawer): string {
         valueText = `${originalVal.type}-${originalVal.year}-${originalVal.number}`
       } else if (key === 'bindObjectiveId') {
         valueText = originalVal
+      } else if (key === 'size') {
+        valueText = parseTaskSize(originalVal) ?? ''
+        if (!valueText) return null
       }
       return `${key}: ${valueText}`
     })

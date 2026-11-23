@@ -2,12 +2,13 @@ import type { MessageInstance } from 'antd/es/message/interface'
 import { isDayjs, type Dayjs } from 'dayjs'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { object, string, optional, special, type Output, safeParse, array, number, union } from 'valibot'
+import { object, string, optional, special, type Output, safeParse, array, number, union, picklist } from 'valibot'
 
 import { genDurationString, parseDurationString } from '@/Agenda3/helpers/block'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { AgendaEntity, AgendaEntityDeadline } from '@/types/entity'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
+import { TASK_SIZES } from '@/types/taskSize'
 
 import { genStart } from './useCreate'
 
@@ -30,6 +31,7 @@ const BaseFormSchema = object({
   ),
   projectId: optional(string()),
   bindObjectiveId: optional(string()),
+  size: optional(picklist(TASK_SIZES)),
 })
 const StartFormSchema = object({
   ...BaseFormSchema.entries,
@@ -60,6 +62,7 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
     timeLogs: initialTask?.timeLogs || [],
     projectId: initialTask?.project?.id,
     bindObjectiveId: initialTask?.bindObjectiveId,
+    size: initialTask?.size,
   }
   const [formData, setFormData] = useState<EditTaskFormNoValidation>(initialFormData)
 

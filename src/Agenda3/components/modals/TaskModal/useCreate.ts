@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { parseDurationString } from '@/Agenda3/helpers/block'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { AgendaEntityDeadline } from '@/types/entity'
+import type { TaskSize } from '@/types/taskSize'
 import { replaceTimeInfo } from '@/util/util'
 
 type BaseCreateTaskForm = {
@@ -19,6 +20,7 @@ type BaseCreateTaskForm = {
   actualTime?: string
   projectId?: string
   bindObjectiveId?: string
+  size?: TaskSize
 }
 export type CreateTaskForm =
   | (BaseCreateTaskForm & {
@@ -74,6 +76,7 @@ const useCreate = (initialData: Partial<CreateTaskForm> | null, messageApi: Mess
         estimatedTime: formData.estimatedTime ? parseDurationString(formData.estimatedTime) : undefined,
         projectId: formData.projectId,
         bindObjectiveId: formData.bindObjectiveId,
+        size: formData.size,
       },
     })
   }

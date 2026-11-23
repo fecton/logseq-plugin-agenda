@@ -48,6 +48,12 @@ If you want to contribute, please visit [contribution guide](./CONTRIBUTING.md)
 ![Timeline](./screenshots/timeline.png)
 ![Pomodoro](./screenshots/pomodoro.png) -->
 
+## Task sizes
+
+In Agenda 3, create or edit a task and choose **Size**: **XXL, XL, L, M, or S**. Each size has a labeled bar icon, from one filled bar for S to five for XXL. Size badges appear on task cards, calendar entries, Time Box, Backlog, and Needs review. Use the selector's clear button to remove a size; existing tasks are unset by default.
+
+Sizes are saved in the task's existing `:AGENDA:` drawer as `size: XL`, alongside duration and other metadata. Recurring tasks retain their size; edit their metadata directly in Logseq, as with other recurrence edits.
+
 ## Scheduled task-end notifications
 
 In the Logseq desktop plugin, open **Agenda 3 > Settings > General Settings** and enable **Notify when a task's scheduled time ends**. Notifications are off by default. Use **Test notification** to check desktop notification access and sound.

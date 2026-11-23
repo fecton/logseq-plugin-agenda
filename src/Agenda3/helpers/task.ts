@@ -294,6 +294,7 @@ export const transformBlockToAgendaEntity = async (
     doneHistory,
     objective,
     bindObjectiveId,
+    size: agendaDrawer?.size,
     rawBlock: block,
   }
 }

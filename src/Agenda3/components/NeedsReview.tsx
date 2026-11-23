@@ -11,6 +11,7 @@ import { logseqAtom } from '@/Agenda3/models/logseq'
 import { settingsAtom } from '@/Agenda3/models/settings'
 import type { AgendaEntity } from '@/types/entity'
 
+import TaskSizeBadge from './TaskSizeBadge'
 import TaskModal from './modals/TaskModal'
 
 export function ReviewTask({ task, reasons = [] }: { task: AgendaEntity; reasons?: OverdueTask['reasons'] }) {
@@ -35,6 +36,7 @@ export function ReviewTask({ task, reasons = [] }: { task: AgendaEntity; reasons
   return (
     <article className="rounded border border-gray-200 bg-white p-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
       <div className="break-words font-medium">{task.showTitle || task.title}</div>
+      <TaskSizeBadge size={task.size} className="mt-1 text-gray-500 dark:text-gray-300" />
       <div className="mt-1 break-words text-xs text-gray-500">{task.project.originalName}</div>
       <div className="my-2 space-y-1 text-xs">
         {task.start ? (

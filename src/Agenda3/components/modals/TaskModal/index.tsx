@@ -24,6 +24,7 @@ import type { TimeLog } from '@/types/task'
 import { getOS } from '@/util/util'
 
 import PageSelect from '../../forms/PageSelect'
+import TaskSizeSelect from '../../forms/TaskSizeSelect'
 import LogseqLogo from '../../icons/LogseqLogo'
 import PageIcon from '../../icons/PageIcon'
 import TimeLogComponent from './TimeLog'
@@ -62,6 +63,7 @@ const TaskModal = ({
   const _open = children ? internalOpen : open
   const [mode, setMode] = useState<'Normal' | 'Advanced'>('Normal')
   const titleInputRef = React.useRef<MentionsRef>(null)
+  const sizeSelectId = React.useId()
   const [titleTagSearchText, setTitleTagSearchText] = useState('')
   const settings = useAtomValue(settingsAtom)
   const { currentGraph } = useAtomValue(logseqAtom)
@@ -399,6 +401,18 @@ const TaskModal = ({
           />
         </div>
         {/* ========= Estimated Time End ========= */}
+
+        <div className="my-2 flex items-center">
+          <label htmlFor={sizeSelectId} className="w-[160px] text-gray-400">
+            {t('Size')}
+          </label>
+          <TaskSizeSelect
+            id={sizeSelectId}
+            value={formData.size}
+            onChange={(size) => updateFormData({ size })}
+            disabled={editDisabled || saving}
+          />
+        </div>
 
         {/* ========= Actual Time Start ========= */}
         {info.type === 'edit' ? (

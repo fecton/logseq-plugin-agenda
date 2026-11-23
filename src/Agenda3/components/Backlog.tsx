@@ -14,6 +14,7 @@ import { settingsAtom } from '@/Agenda3/models/settings'
 import { cn } from '@/util/util'
 
 import { backlogsAtom, plannerBacklogsAtom } from '../models/entities/backlogs'
+import TaskSizeBadge from './TaskSizeBadge'
 import s from './backlog.module.less'
 import LogseqLogo from './icons/LogseqLogo'
 
@@ -119,6 +120,7 @@ const Backlog = ({
                           backlog: true,
                         })}
                       >
+                        <TaskSizeBadge size={task.size} className="mr-1 align-middle" />
                         {task.showTitle}{' '}
                         <span
                           className="inline-block cursor-pointer text-gray-300 opacity-0 transition-opacity group-hover:opacity-100"

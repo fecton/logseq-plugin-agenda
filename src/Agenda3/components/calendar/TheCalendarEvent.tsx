@@ -7,6 +7,8 @@ import { IoIosCheckmarkCircle } from 'react-icons/io'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
 import { cn } from '@/util/util'
 
+import TaskSizeBadge from '../TaskSizeBadge'
+
 const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
   const taskData = info.event.extendedProps
   const showTitle = taskData?.id ? taskData.showTitle : info.event.title
@@ -35,10 +37,9 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: info.event.backgroundColor }} />
           )}
           <span className="flex-1 truncate">{showTitle}</span>
+          <TaskSizeBadge size={taskData?.size} />
           {isDone ? (
-            <IoIosCheckmarkCircle
-              className={cn('absolute right-0', info.event.allDay ? 'text-white' : 'text-green-500')}
-            />
+            <IoIosCheckmarkCircle className={cn('shrink-0', info.event.allDay ? 'text-white' : 'text-green-500')} />
           ) : null}
           {isShowDeadline ? (
             <DeadlineNumber
@@ -60,6 +61,7 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
               'text-[10px]': isSmallHeight,
             })}
           >
+            <TaskSizeBadge size={taskData?.size} className="mr-1 align-middle" />
             {showTitle}
           </div>
           {isShowTimeText ? <div className="text-xs text-gray-200">{info.timeText}</div> : null}
