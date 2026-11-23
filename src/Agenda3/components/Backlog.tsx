@@ -1,7 +1,7 @@
 import { CaretRightOutlined } from '@ant-design/icons'
 import { Draggable } from '@fullcalendar/interaction'
 import { Collapse, Empty, Select } from 'antd'
-import { useAtom, useAtomValue } from 'jotai'
+import { useAtomValue } from 'jotai'
 import { useEffect, useRef, useState } from 'react'
 import { BsArchive } from 'react-icons/bs'
 import { ReactSortable } from 'react-sortablejs'
@@ -13,14 +13,20 @@ import { logseqAtom } from '@/Agenda3/models/logseq'
 import { settingsAtom } from '@/Agenda3/models/settings'
 import { cn } from '@/util/util'
 
-import { backlogsAtom } from '../models/entities/backlogs'
+import { backlogsAtom, plannerBacklogsAtom } from '../models/entities/backlogs'
 import s from './backlog.module.less'
 import LogseqLogo from './icons/LogseqLogo'
 
-const Backlog = ({ bindCalendar = true }: { bindCalendar?: boolean }) => {
+const Backlog = ({
+  bindCalendar = true,
+  excludeOverdue = false,
+}: {
+  bindCalendar?: boolean
+  excludeOverdue?: boolean
+}) => {
   const { currentTheme: theme } = useTheme()
   const taskContainerRef = useRef<HTMLDivElement>(null)
-  const [backlogTasks] = useAtom(backlogsAtom)
+  const backlogTasks = useAtomValue(excludeOverdue ? plannerBacklogsAtom : backlogsAtom)
   const { currentGraph } = useAtomValue(logseqAtom)
   const categorizedTasks = categorizeTasksByPage(backlogTasks)
   const projects = categorizedTasks.map(({ project }) => project)
@@ -42,9 +48,10 @@ const Backlog = ({ bindCalendar = true }: { bindCalendar?: boolean }) => {
 
   useEffect(() => {
     if (bindCalendar && taskContainerRef.current) {
-      new Draggable(taskContainerRef.current, {
+      const draggable = new Draggable(taskContainerRef.current, {
         itemSelector: '.droppable-task-element',
       })
+      return () => draggable.destroy()
     }
   }, [backlogTasks.length, bindCalendar])
   return (
@@ -103,7 +110,8 @@ const Backlog = ({ bindCalendar = true }: { bindCalendar?: boolean }) => {
                     return (
                       <div
                         key={task.id}
-                        className="droppable-task-element group cursor-move break-all rounded border bg-[#f9fafb] px-2 py-2 text-sm text-gray-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500"
+                        className="droppable-task-element group cursor-move break-all rounded border bg-[#f9fafb] px-2 py-2 text-sm text-gray-600
+                          dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500"
                         data-event={JSON.stringify({
                           id: task.id,
                           title: task.showTitle,

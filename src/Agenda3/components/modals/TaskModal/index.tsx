@@ -9,7 +9,6 @@ import { CgSandClock } from 'react-icons/cg'
 import { IoIosCheckmarkCircleOutline, IoMdCloseCircle } from 'react-icons/io'
 import { RiCheckboxBlankCircleLine, RiDeleteBin4Line } from 'react-icons/ri'
 
-import { updateBlockTaskStatus } from '@/Agenda3/helpers/block'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
 import { track } from '@/Agenda3/helpers/umami'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
@@ -21,7 +20,7 @@ import DurationSelect from '@/components/TaskModal/components/DurationSelect'
 import TimeSelect from '@/components/TaskModal/components/TimeSelect'
 import { SHOW_DATETIME_FORMATTER, SHOW_DATE_FORMATTER } from '@/constants/agenda'
 import type { AgendaEntity } from '@/types/entity'
-import type { AgendaTaskWithStartOrDeadline, TimeLog } from '@/types/task'
+import type { TimeLog } from '@/types/task'
 import { getOS } from '@/util/util'
 
 import PageSelect from '../../forms/PageSelect'
@@ -53,12 +52,13 @@ const TaskModal = ({
       }
     | {
         type: 'edit'
-        initialTaskData: AgendaTaskWithStartOrDeadline
+        initialTaskData: AgendaEntity
       }
 }) => {
   const { t } = useTranslation()
   const [messageApi, contextHolder] = message.useMessage()
   const [internalOpen, setInternalOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
   const _open = children ? internalOpen : open
   const [mode, setMode] = useState<'Normal' | 'Advanced'>('Normal')
   const titleInputRef = React.useRef<MentionsRef>(null)
@@ -86,21 +86,33 @@ const TaskModal = ({
   const action = info.type === 'edit' ? edit : create
   // can't edit recurring task
   const editDisabled =
-    info.type === 'edit' && (info.initialTaskData.rrule || info.initialTaskData.recurringPast) ? true : false
+    info.type === 'edit' &&
+    (info.initialTaskData.rrule || info.initialTaskData.recurringPast || info.initialTaskData.rawBlock.repeated)
+      ? true
+      : false
 
   const showStartTimeFormatter = allDay ? SHOW_DATE_FORMATTER : SHOW_DATETIME_FORMATTER
   const showDeadlineTimeFormatter = deadline?.allDay ? SHOW_DATE_FORMATTER : SHOW_DATETIME_FORMATTER
 
   const handleCancel = () => {
+    if (saving) return
     setInternalOpen(false)
     onCancel?.()
   }
   const handleOk = async () => {
+    if (saving || editDisabled) return
     track(`Task Modal: Ok Button`, { type: info.type })
-    const task = await action()
-    if (!task) return messageApi.error('Failed to create task')
-    onOk?.()
-    setInternalOpen(false)
+    setSaving(true)
+    try {
+      const task = await action()
+      if (!task) throw new Error('Failed to save task')
+      onOk?.()
+      setInternalOpen(false)
+    } catch (error) {
+      messageApi.error(t('Could not save task. Please try again.'))
+    } finally {
+      setSaving(false)
+    }
   }
   const handleDelete = async () => {
     if (info.type === 'edit') {
@@ -150,31 +162,33 @@ const TaskModal = ({
     if (editDisabled) return messageApi.error('Please modify the status of the recurring task in logseq.')
     if (info.type !== 'edit') return
 
-    await updateBlockTaskStatus(info.initialTaskData, status)
-    updateEntity({
-      type: 'task-status',
-      id: info.initialTaskData.id,
-      data: status,
-    })
-    onOk?.()
-    onCancel?.()
-    setInternalOpen(false)
+    if (saving) return
+    setSaving(true)
+    try {
+      await updateEntity({ type: 'task-status', id: info.initialTaskData.id, data: status })
+      onOk?.()
+      setInternalOpen(false)
+    } catch (error) {
+      messageApi.error(t('Could not save task. Please try again.'))
+    } finally {
+      setSaving(false)
+    }
   }
   // Add keyboard event listener
   useEffect(() => {
+    if (!_open) return
     function handleKeyDown(event) {
       const isMac = getOS() === 'mac'
       const mainModifierKey = isMac ? event.metaKey : event.ctrlKey
 
       if (event.code === 'KeyW' && mainModifierKey) {
         // Close the modal on pressing ctrl+q (or cmd+q on Mac)
-        onCancel?.()
-        setInternalOpen(false)
+        handleCancel()
         event.stopPropagation()
       } else if (event.code === 'KeyS' && mainModifierKey) {
         // Save and close the modal on pressing ctrl+s (or cmd+s on Mac)
-        onOk?.()
-        setInternalOpen(false)
+        event.preventDefault()
+        void handleOk()
         event.stopPropagation()
       } else if (event.code === 'Enter' && mainModifierKey) {
         // toggle TODO status on pressing ctrl+Enter (or cmd+Enter on Mac)
@@ -183,7 +197,6 @@ const TaskModal = ({
         }
         if (info.type === 'edit' && info.initialTaskData.status === 'todo') {
           onSwitchTaskStatus('done')
-          setInternalOpen(false)
         }
         event.stopPropagation()
       }
@@ -194,7 +207,7 @@ const TaskModal = ({
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [])
+  })
 
   useEffect(() => {
     // 增加延时，否则二次打开无法自动聚焦
@@ -224,7 +237,7 @@ const TaskModal = ({
                 <Button
                   className="inline-flex items-center px-2"
                   icon={<IoIosCheckmarkCircleOutline className="text-base" />}
-                  disabled={editDisabled}
+                  disabled={editDisabled || saving}
                   onClick={() => onSwitchTaskStatus('done')}
                 >
                   {t('Complete')}
@@ -233,7 +246,7 @@ const TaskModal = ({
               {info.type === 'edit' && info.initialTaskData.status === 'done' ? (
                 <Button
                   className="inline-flex items-center px-2"
-                  disabled={editDisabled}
+                  disabled={editDisabled || saving}
                   icon={<RiCheckboxBlankCircleLine />}
                   onClick={() => onSwitchTaskStatus('todo')}
                 >
@@ -249,6 +262,7 @@ const TaskModal = ({
                 >
                   <Button
                     className="inline-flex items-center px-2 hover:!border-red-500 hover:!text-red-500"
+                    disabled={saving}
                     icon={<RiDeleteBin4Line />}
                   >
                     {t('Delete')}
@@ -269,10 +283,10 @@ const TaskModal = ({
               ) : null}
             </div>
             <div>
-              <Button key="cancel" onClick={handleCancel}>
+              <Button key="cancel" onClick={handleCancel} disabled={saving}>
                 {t('Cancel')}
               </Button>
-              <Button key="ok" type="primary" onClick={handleOk} disabled={editDisabled}>
+              <Button key="ok" type="primary" onClick={handleOk} disabled={editDisabled} loading={saving}>
                 {info.type === 'create' ? t('Add Task') : t('Save')}
               </Button>
             </div>

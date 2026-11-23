@@ -1,17 +1,17 @@
 import type { MessageInstance } from 'antd/es/message/interface'
-import dayjs, { isDayjs, type Dayjs } from 'dayjs'
+import { isDayjs, type Dayjs } from 'dayjs'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { object, string, optional, special, type Output, safeParse, array, number, union } from 'valibot'
 
 import { genDurationString, parseDurationString } from '@/Agenda3/helpers/block'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
-import type { AgendaEntityDeadline } from '@/types/entity'
+import type { AgendaEntity, AgendaEntityDeadline } from '@/types/entity'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
 
 import { genStart } from './useCreate'
 
-const DayjsSchema = special<Dayjs>((input) => isDayjs(input))
+const DayjsSchema = special<Dayjs>((input) => isDayjs(input) && input.isValid())
 const BaseFormSchema = object({
   title: string(),
   endDateVal: optional(DayjsSchema),
@@ -44,7 +44,7 @@ const DeadlineFormSchema = object({
 const EditFormSchema = union([StartFormSchema, DeadlineFormSchema])
 type EditTaskForm = Output<typeof EditFormSchema>
 type EditTaskFormNoValidation = Partial<EditTaskForm>
-const useEdit = (initialTask: AgendaTaskWithStartOrDeadline | null, messageApi: MessageInstance) => {
+const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) => {
   const { t } = useTranslation()
   const { updateEntity } = useAgendaEntities()
   const initialFormData = {
@@ -52,8 +52,9 @@ const useEdit = (initialTask: AgendaTaskWithStartOrDeadline | null, messageApi: 
     startDateVal: initialTask?.start,
     endDateVal: initialTask?.end,
     deadlineDateVal: initialTask?.deadline?.value,
-    deadlineTime: initialTask?.deadline?.allDay ? undefined : dayjs(initialTask?.deadline?.value).format('HH:mm'),
-    startTime: initialTask?.allDay ? undefined : dayjs(initialTask?.start).format('HH:mm'),
+    deadlineTime:
+      initialTask?.deadline && !initialTask.deadline.allDay ? initialTask.deadline.value.format('HH:mm') : undefined,
+    startTime: initialTask?.start && !initialTask.allDay ? initialTask.start.format('HH:mm') : undefined,
     estimatedTime: initialTask?.estimatedTime ? genDurationString(initialTask.estimatedTime) : undefined,
     actualTime: initialTask?.actualTime ? genDurationString(initialTask.actualTime) : undefined,
     timeLogs: initialTask?.timeLogs || [],
@@ -76,6 +77,10 @@ const useEdit = (initialTask: AgendaTaskWithStartOrDeadline | null, messageApi: 
       const newData = {
         ..._data,
         ...data,
+      }
+      // Moving just the start of a range keeps its original span.
+      if (data.startDateVal && !('endDateVal' in data) && _data.startDateVal && _data.endDateVal) {
+        newData.endDateVal = data.startDateVal.add(_data.endDateVal.diff(_data.startDateVal, 'day'), 'day')
       }
       return {
         ...newData,
@@ -106,10 +111,16 @@ const useEdit = (initialTask: AgendaTaskWithStartOrDeadline | null, messageApi: 
       console.error('Failed to edit task block', result)
       throw new Error('Failed to edit task block')
     }
+    if (formData.endDateVal && (!start || formData.endDateVal.isBefore(start, 'day'))) {
+      const message = t('End date must not precede start date')
+      messageApi.error(message)
+      throw new Error(message)
+    }
     const estimatedTime = result.output.estimatedTime
     return updateEntity({
       type: 'task',
       id: initialTask.id,
+      originalTask: initialTask,
       data: {
         ...initialTask,
         ...result.output,

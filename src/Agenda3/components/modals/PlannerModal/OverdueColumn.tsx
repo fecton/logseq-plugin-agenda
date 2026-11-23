@@ -2,12 +2,12 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReactSortable } from 'react-sortablejs'
 
-import type { AgendaTaskWithStart } from '@/types/task'
+import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
 import { cn } from '@/util/util'
 
 import TaskCard from '../../kanban/taskCard/TaskCard'
 
-const OverdueColumn = ({ tasks }: { tasks: AgendaTaskWithStart[] }) => {
+const OverdueColumn = ({ tasks }: { tasks: AgendaTaskWithStartOrDeadline[] }) => {
   const { t } = useTranslation()
   return (
     <div className="mt-2 flex w-[281px] shrink-0 flex-col rounded-md bg-gray-300 px-2 py-2 dark:bg-[#212121]">

@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import usePages from '@/Agenda3/hooks/usePages'
+import useReviewRefresh from '@/Agenda3/hooks/useReviewRefresh'
 import { appAtom } from '@/Agenda3/models/app'
 import { logseqAtom } from '@/Agenda3/models/logseq'
 import { cn } from '@/util/util'
@@ -29,6 +30,7 @@ const Dashboard = () => {
   const [connectionErrorModal, setConnectionErrorModal] = useState(false)
 
   const loadData = useCallback(() => {
+    logseq.App.getUserConfigs().then((res) => (window.logseqAppUserConfigs = res))
     refreshEntities().catch((error) => {
       console.error('retrieve tasks failed', error)
       if (import.meta.env.VITE_MODE === 'web') {
@@ -41,23 +43,7 @@ const Dashboard = () => {
     //   console.log('getUserConfigs', res)
     // })
   }, [refreshEntities])
-  // get tasks and projects
-  useEffect(() => {
-    const handleWindowFocus = () => {
-      // 更新 logseqAppUserConfigs
-      logseq.App.getUserConfigs().then((res) => (window.logseqAppUserConfigs = res))
-      // 在浏览器获得焦点时刷新数据
-      loadData()
-    }
-    // 添加窗口焦点事件监听器
-    window.addEventListener('focus', handleWindowFocus)
-    // 在页面初次加载时刷新数据
-    loadData()
-    // 在组件卸载时移除事件监听器
-    return () => {
-      window.removeEventListener('focus', handleWindowFocus)
-    }
-  }, [loadData])
+  useReviewRefresh(loadData)
   // initialize settings
   useEffect(() => {
     initializeSettings()

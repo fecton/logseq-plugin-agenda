@@ -9,6 +9,7 @@ import { LuCalendarDays, LuKanbanSquare } from 'react-icons/lu'
 
 import { track } from '@/Agenda3/helpers/umami'
 import { type App, appAtom } from '@/Agenda3/models/app'
+import { needsReviewAtom } from '@/Agenda3/models/entities/needsReview'
 import { settingsAtom } from '@/Agenda3/models/settings'
 import { cn } from '@/util/util'
 
@@ -25,6 +26,7 @@ const MultipleView = ({ className }: { className?: string }) => {
   const calendarRef = useRef<CalendarHandle>(null)
   const [app, setApp] = useAtom(appAtom)
   const settings = useAtomValue(settingsAtom)
+  const { count: reviewCount } = useAtomValue(needsReviewAtom)
 
   const [calendarTitle, setCalendarTitle] = useState('')
 
@@ -58,8 +60,7 @@ const MultipleView = ({ className }: { className?: string }) => {
   const onClickAppViewChange = (view) => {
     const _view = view as App['view']
     setApp((_app) => {
-      const _sidebarType = _view === 'tasks' ? 'timebox' : 'backlog'
-      return { ..._app, view: _view, sidebarType: _sidebarType }
+      return { ..._app, view: _view }
     })
     track('View Change', { view: view })
   }
@@ -174,6 +175,14 @@ const MultipleView = ({ className }: { className?: string }) => {
           ) : null}
         </div>
         <div className="flex items-center gap-3">
+          <Button
+            type={app.sidebarType === 'review' && !app.rightSidebarFolded ? 'primary' : 'default'}
+            onClick={() =>
+              setApp((_app) => ({ ..._app, sidebarType: 'review', sidebarChosen: true, rightSidebarFolded: false }))
+            }
+          >
+            {t('Needs review')} ({reviewCount})
+          </Button>
           {app.view === 'calendar' ? (
             <CalendarOperation
               value={app.calendarView}
@@ -185,7 +194,7 @@ const MultipleView = ({ className }: { className?: string }) => {
             />
           ) : null}
           <Segmented
-            defaultValue={app.view}
+            value={app.view}
             className="!bg-gray-200 dark:!bg-zinc-700"
             options={VIEWS}
             onChange={onClickAppViewChange}

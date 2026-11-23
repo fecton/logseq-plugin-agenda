@@ -7,7 +7,8 @@ export type App = {
   view: 'tasks' | 'calendar'
   rightSidebarFolded: boolean
   calendarView: CalendarView
-  sidebarType: 'timebox' | 'backlog' | 'objective'
+  sidebarType: 'timebox' | 'backlog' | 'objective' | 'review'
+  sidebarChosen?: boolean
   objectivePeriod?: AgendaEntityObjective
 }
 export const appAtom = atom<App>({

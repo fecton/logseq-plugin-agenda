@@ -1,10 +1,10 @@
 import type { BlockEntity } from '@logseq/libs/dist/LSPlugin.user'
 import { message, notification } from 'antd'
 import { type Dayjs } from 'dayjs'
-import { useAtom, useAtomValue } from 'jotai'
+import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { useCallback } from 'react'
 
-import { getAgendaEntities, transformBlockToAgendaEntity } from '@/Agenda3/helpers/task'
+import { transformBlockToAgendaEntity } from '@/Agenda3/helpers/task'
 import { settingsAtom } from '@/Agenda3/models/settings'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaObjective } from '@/types/objective'
@@ -23,18 +23,18 @@ import {
   updateObjectiveBlock,
   updateTaskBlock,
 } from '../helpers/block'
-import { agendaEntitiesAtom } from '../models/entities/entities'
+import { agendaEntitiesAtom, invalidateEntitiesAtom, refreshEntitiesAtom } from '../models/entities/entities'
 
 const useAgendaEntities = () => {
   const settings = useAtomValue(settingsAtom)
   const [entities, setEntities] = useAtom(agendaEntitiesAtom)
+  const refresh = useSetAtom(refreshEntitiesAtom)
+  const invalidate = useSetAtom(invalidateEntitiesAtom)
 
   const refreshEntities = useCallback(() => {
-    if (settings.isInitialized === false) return Promise.resolve()
-    return getAgendaEntities(settings).then((res) => {
-      setEntities(res)
-    })
-  }, [settings])
+    if (!settings.isInitialized) return Promise.resolve()
+    return refresh()
+  }, [settings, refresh])
 
   const updateEntity = async (
     params:
@@ -42,6 +42,7 @@ const useAgendaEntities = () => {
           type: 'task'
           id: string
           data: AgendaTaskWithStartOrDeadline & { projectId?: string }
+          originalTask?: AgendaEntity
         }
       | {
           type: 'task-date'
@@ -76,9 +77,10 @@ const useAgendaEntities = () => {
       throw new Error('Entity not found')
     }
     let rawBlock: BlockEntity | null = null
+    invalidate()
     switch (type) {
       case 'task':
-        rawBlock = await updateTaskBlock(data)
+        rawBlock = await updateTaskBlock(data, params.originalTask)
         break
       case 'task-date':
         rawBlock = await updateBlockDateInfo({
@@ -110,6 +112,7 @@ const useAgendaEntities = () => {
     }
 
     const newTask = await transformBlockToAgendaEntity(block, settings)
+    invalidate()
     const isFilterMode = (settings.selectedFilters || [])?.length > 0
     if (isFilterMode && (newTask.filters ?? []).length === 0) {
       const message = type.startsWith('task')
@@ -123,7 +126,8 @@ const useAgendaEntities = () => {
         description,
         duration: 0,
       })
-      return false
+      setEntities((_tasks) => _tasks.filter((task) => task.id !== id))
+      return newTask
     }
     setEntities((_tasks) => {
       return _tasks.map((task) => {

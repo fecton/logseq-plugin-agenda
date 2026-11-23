@@ -42,11 +42,12 @@ const PlannerModal = ({
   const thisWeekExcludeTomorrowTasks = useAtomValue(thisWeekExcludeTomorrowTasksAtom)
   const thisMonthExcludeTomorrowTasks = useAtomValue(thisMonthExcludeTomorrowTasksAtom)
   const overdueTasks = useAtomValue(overdueTasksAtom)
+  const overdueIds = new Set(overdueTasks.map((task) => task.id))
   const tasks =
     type === 'today'
       ? [...todayTasks, ...thisWeekTasks, ...thisMonthTasks]
       : [...todayTasks, ...tomorrowTasks, ...thisWeekExcludeTomorrowTasks, ...thisMonthExcludeTomorrowTasks]
-  const allTasks = backlogTasks.concat(tasks, overdueTasks)
+  const allTasks = [...new Map(backlogTasks.concat(tasks, overdueTasks).map((task) => [task.id, task])).values()]
 
   const thisWeekObjectives = useAtomValue(thisWeekObjectivesAtom)
   const thisMonthObjectives = useAtomValue(thisMonthObjectivesAtom)
@@ -86,7 +87,7 @@ const PlannerModal = ({
           <OverdueColumn tasks={overdueTasks} />
           {/* Cycle */}
           {cycles.map((cycle) => {
-            const cycleTasks: AgendaTaskWithStart[] = tasksInCycle[cycle]
+            const cycleTasks: AgendaTaskWithStart[] = tasksInCycle[cycle].filter((task) => !overdueIds.has(task.id))
             const cycleObjectives: AgendaObjectiveWithTasks[] = objectivesInCycle[cycle] ?? []
             return (
               <CycleColumn
@@ -106,14 +107,16 @@ const PlannerModal = ({
               backlogFolded ? 'w-0' : 'w-[290px]',
             )}
           >
-            <Backlog bindCalendar={false} />
+            <Backlog bindCalendar={false} excludeOverdue />
             <div
               className={cn(
-                'absolute -left-[16px] top-0 z-10 flex h-full w-[16px] items-center opacity-0 transition-all group-hover/backlog:opacity-100',
+                `absolute -left-[16px] top-0 z-10 flex h-full w-[16px] items-center opacity-0 transition-all
+                group-hover/backlog:opacity-100`,
               )}
             >
               <div
-                className="flex h-[50px] w-full cursor-pointer items-center rounded-bl rounded-tl border-b border-l border-t bg-[#f0f0f0] text-gray-400 hover:bg-gray-200 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
+                className="flex h-[50px] w-full cursor-pointer items-center rounded-bl rounded-tl border-b border-l border-t bg-[#f0f0f0]
+                  text-gray-400 hover:bg-gray-200 dark:border-zinc-800 dark:bg-zinc-950 dark:hover:bg-zinc-900"
                 onClick={() => setBacklogFolded((folded) => !folded)}
               >
                 {backlogFolded ? <AiOutlineLeft /> : <AiOutlineRight />}

@@ -36,19 +36,14 @@ const insertScheduled = (content: string, scheduled: string) => {
 /**
  * change task date and estimated time
  */
-export const updateBlockDateInfo = async ({
-  uuid,
-  allDay,
-  start,
-  end,
-  estimatedTime,
-}: {
+export const updateBlockDateInfo = async (dateInfo: {
   uuid: string
   allDay: boolean
   start: Dayjs
   end?: Dayjs
   estimatedTime?: number
 }) => {
+  const { uuid, allDay, start } = dateInfo
   const originalBlock = await logseq.Editor.getBlock(uuid)
   if (!originalBlock) return Promise.reject(new Error('Block not found'))
 
@@ -64,10 +59,16 @@ export const updateBlockDateInfo = async ({
         .join('\n')
     : insertScheduled(originalBlock.content, scheduledText)
   // update estimated time and end date
-  const newContent2 = updateBlockAgendaDrawer(newContent, {
-    estimated: estimatedTime,
-    end,
-  })
+  const drawer: AgendaDrawer = {}
+  if ('estimatedTime' in dateInfo) drawer.estimated = dateInfo.estimatedTime
+  if ('end' in dateInfo) {
+    drawer.end = dateInfo.end
+  } else {
+    const previousEnd = parseAgendaDrawer(originalBlock.content)?.end
+    const previousDate = /^SCHEDULED: <(\d{4}-\d{2}-\d{2})/m.exec(originalBlock.content)?.[1]
+    if (previousEnd && previousDate) drawer.end = start.add(previousEnd.diff(dayjs(previousDate), 'day'), 'day')
+  }
+  const newContent2 = updateBlockAgendaDrawer(newContent, drawer)
   await logseq.Editor.updateBlock(uuid, newContent2)
   return logseq.Editor.getBlock(uuid)
 }
@@ -230,26 +231,37 @@ export function generateTimeLogText({ start, end }: { start: Dayjs; end: Dayjs }
 /**
  * update task
  */
-export const updateTaskBlock = async (taskInfo: AgendaTaskWithStartOrDeadline & { projectId?: string }) => {
+export const updateTaskBlock = async (
+  taskInfo: AgendaTaskWithStartOrDeadline & { projectId?: string },
+  originalTask?: AgendaEntity,
+) => {
   const { id, title, allDay, start, end, estimatedTime, deadline, status, timeLogs, projectId, bindObjectiveId } =
     taskInfo
   const originalBlock = await logseq.Editor.getBlock(id)
   if (!originalBlock) return Promise.reject(new Error('Block not found'))
 
-  const content1 = updateBlockTaskTitle(originalBlock.content, title, status)
-  const content2 = updateBlockScheduled(content1, { start, allDay })
-  const content3 = updateBlockDeadline(content2, deadline)
-  const content4 = updateBlockAgendaDrawer(content3, {
-    estimated: estimatedTime,
-    end,
-    bindObjectiveId,
-  })
-  const content5 = updateBlockTimeLogText(content4, timeLogs)
-  await updateBlock(id, content5)
+  // Apply only edited fields to the latest block. A date edit must not rewrite notes,
+  // workflow markers, repeating deadlines, logs or metadata changed outside Agenda.
+  const changed = (a: unknown, b: unknown) => !originalTask || JSON.stringify(a) !== JSON.stringify(b)
+  let content = originalBlock.content
+  if (changed(title, originalTask?.title) || changed(status, originalTask?.status)) {
+    content = updateBlockTaskTitle(content, title, status)
+  }
+  if (changed(start, originalTask?.start) || changed(allDay, originalTask?.allDay)) {
+    content = updateBlockScheduled(content, { start, allDay })
+  }
+  if (changed(deadline, originalTask?.deadline)) content = updateBlockDeadline(content, deadline)
+  const drawer: AgendaDrawer = {}
+  if (changed(estimatedTime, originalTask?.estimatedTime)) drawer.estimated = estimatedTime
+  if (changed(end, originalTask?.end)) drawer.end = end
+  if (changed(bindObjectiveId, originalTask?.bindObjectiveId)) drawer.bindObjectiveId = bindObjectiveId
+  content = updateBlockAgendaDrawer(content, drawer)
+  if (changed(timeLogs ?? [], originalTask?.timeLogs ?? [])) content = updateBlockTimeLogText(content, timeLogs)
+  await updateBlock(id, content)
 
   const page = await logseq.Editor.getPage(originalBlock.page.id)
   if (!page) return Promise.reject(new Error('Page not found'))
-  if (page.uuid !== projectId) {
+  if (changed(projectId, originalTask?.project.id) && page.uuid !== projectId) {
     // move task to new page's bottom
     const targetPageId = projectId ? projectId : (await createTodayJournalPage()).uuid
     const blocks = await logseq.Editor.getPageBlocksTree(targetPageId)
@@ -267,15 +279,17 @@ export const updateTaskBlock = async (taskInfo: AgendaTaskWithStartOrDeadline & 
  */
 export const updateBlockTaskStatus = async (taskInfo: AgendaEntity, status: AgendaEntity['status']) => {
   const todoTag = status === 'done' ? 'DONE' : getTodoTag()
-  const rawTodoTag = taskInfo.rawBlock.marker
+  const block = await logseq.Editor.getBlock(taskInfo.id)
+  if (!block) throw new Error('Block not found')
+  const rawTodoTag = block.marker
   if (!rawTodoTag) {
     message.error('This is not a todo block')
     return null
   }
   const reg = new RegExp(`^${rawTodoTag}`)
-  const newContent = taskInfo.rawBlock.content.replace(reg, todoTag)
-  await logseq.Editor.updateBlock(taskInfo.rawBlock.uuid, newContent)
-  return logseq.Editor.getBlock(taskInfo.rawBlock.uuid)
+  const newContent = block.content.replace(reg, todoTag)
+  await logseq.Editor.updateBlock(block.uuid, newContent)
+  return logseq.Editor.getBlock(block.uuid)
 }
 
 /**
@@ -410,11 +424,33 @@ export function genAgendaDrawerText(drawer: AgendaDrawer): string {
  * update agenda drawer
  */
 export function updateBlockAgendaDrawer(blockContent: string, drawer: AgendaDrawer) {
-  // const _drawer = drawer
-  // if (!drawer.estimated || drawer.estimated === DEFAULT_ESTIMATED_TIME) delete _drawer.estimated
-  const newText = genAgendaDrawerText(drawer)
-  if (!AGENDA_DRAWER_REGEX.test(blockContent) && newText) return blockContent + '\n' + newText
-  return blockContent.replace(AGENDA_DRAWER_REGEX, '\n' + newText)
+  const keys = Object.keys(drawer)
+  if (!keys.length) return blockContent
+  const existing = blockContent.match(AGENDA_DRAWER_REGEX)
+  if (!existing) {
+    const text = genAgendaDrawerText(drawer)
+    return text ? blockContent + '\n' + text : blockContent
+  }
+  const remaining = new Set(keys)
+  const lines = existing[1]
+    .split('\n')
+    .slice(1)
+    .flatMap((line) => {
+      const key = line.split(':', 1)[0].trim()
+      if (!keys.includes(key)) return [line]
+      remaining.delete(key)
+      const replacement = genAgendaDrawerText({ [key]: drawer[key] })
+        .split('\n')
+        .slice(1, -1)
+      return replacement
+    })
+  for (const key of remaining)
+    lines.push(
+      ...genAgendaDrawerText({ [key]: drawer[key] })
+        .split('\n')
+        .slice(1, -1),
+    )
+  return blockContent.replace(AGENDA_DRAWER_REGEX, lines.length ? '\n:AGENDA:\n' + lines.join('\n') + '\n:END:' : '')
 }
 /**
  * updateScheduled
@@ -428,13 +464,12 @@ export function updateBlockScheduled(blockContent: string, { start, allDay }: { 
   }
   return blockContent
     .split('\n')
-    .map((line) => {
+    .flatMap((line) => {
       if (line.startsWith('SCHEDULED: <')) {
-        return scheduleText
+        return scheduleText ? [scheduleText] : []
       }
-      return line
+      return [line]
     })
-    .filter(Boolean)
     .join('\n')
 }
 /**
@@ -449,20 +484,20 @@ export function updateBlockDeadline(blockContent: string, deadline?: AgendaEntit
   }
   return blockContent
     .split('\n')
-    .map((line) => {
+    .flatMap((line) => {
       if (line.startsWith('DEADLINE: <')) {
-        return deadlineText
+        return deadlineText ? [deadlineText] : []
       }
-      return line
+      return [line]
     })
-    .filter(Boolean)
     .join('\n')
 }
 /**
  * update title
  */
 export function updateBlockTaskTitle(blockContent: string, title: string, status: 'done' | 'todo') {
-  const todoTag = status === 'done' ? 'DONE' : getTodoTag()
+  const marker = /^(TODO|DOING|NOW|LATER|WAITING)\b/.exec(blockContent)?.[1]
+  const todoTag = status === 'done' ? 'DONE' : marker ?? getTodoTag()
   return blockContent
     .split('\n')
     .map((line, index) => {

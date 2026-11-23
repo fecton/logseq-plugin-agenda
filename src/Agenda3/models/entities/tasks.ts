@@ -5,6 +5,7 @@ import { RECENT_DAYS_RANGE } from '@/constants/agenda'
 import type { AgendaTaskWithStart, AgendaTaskWithStartOrDeadline } from '@/types/task'
 
 import { agendaEntitiesAtom } from './entities'
+import { needsReviewAtom } from './needsReview'
 import { agendaObjectivesAtom } from './objectives'
 
 // task
@@ -117,14 +118,4 @@ export const thisMonthExcludeTomorrowTasksAtom = atom<AgendaTaskWithStart[]>((ge
   })
 })
 
-export const overdueTasksAtom = atom<AgendaTaskWithStart[]>((get) => {
-  const allTasks = get(tasksWithStartAtom)
-
-  const today = dayjs()
-  return allTasks.filter((task) => {
-    if (!task.start || task.status === 'done') return false
-    // multiple days task
-    if (task.end) return task.end.isBefore(today, 'day')
-    return task.start.isBefore(today, 'day')
-  })
-})
+export const overdueTasksAtom = atom((get) => get(needsReviewAtom).overdue.map(({ task }) => task))
