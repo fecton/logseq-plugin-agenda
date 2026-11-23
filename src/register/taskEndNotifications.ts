@@ -4,6 +4,7 @@ import type { Settings } from '@/Agenda3/models/settings'
 
 const POLL_INTERVAL = 10_000
 const MAX_LATENESS = 5 * 60_000
+let openAgendaFromNotification: (() => void | Promise<void>) | undefined
 
 export const showTaskEndNotification = (task: TaskEndNotification, graph: string) => {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
@@ -15,10 +16,16 @@ export const showTaskEndNotification = (task: TaskEndNotification, graph: string
   })
   notification.onclick = async () => {
     notification.close()
-    // Never navigate to a block in a different graph after a graph switch.
-    if ((await logseq.App.getCurrentGraph())?.url === graph && task.id) {
-      logseq.hideMainUI()
-      logseq.App.pushState('page', { name: task.id })
+    if (!openAgendaFromNotification) return
+    try {
+      // Keep the notification's native focus behavior and also focus the Logseq host,
+      // rather than just its plugin iframe. Do this before yielding the click gesture.
+      window.top?.focus()
+      // Open Agenda in the current graph; never follow a stale notification's block ID.
+      await openAgendaFromNotification()
+    } catch (error) {
+      console.error('[Agenda] Could not open Agenda from the notification:', error)
+      logseq.UI.showMsg('Could not open Agenda. Please use the Agenda toolbar button.', 'error')
     }
   }
   notification.onerror = () => console.error('[Agenda] Could not display the task-end notification.')
@@ -40,7 +47,8 @@ export const testTaskEndNotification = async () => {
 }
 
 /** Lives outside React so alerts also work before Agenda is opened and while it is hidden. */
-export const initializeTaskEndNotifications = () => {
+export const initializeTaskEndNotifications = (openAgenda: () => void | Promise<void>) => {
+  openAgendaFromNotification = openAgenda
   let lastCheck = Date.now()
   let graphUrl: string | undefined
   let generation = 0
@@ -106,5 +114,6 @@ export const initializeTaskEndNotifications = () => {
     clearTimeout(timer)
     unsubscribe()
     unsubscribeSettings()
+    if (openAgendaFromNotification === openAgenda) openAgendaFromNotification = undefined
   }
 }

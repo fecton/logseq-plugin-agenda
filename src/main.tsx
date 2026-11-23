@@ -80,14 +80,14 @@ if (import.meta.env.VITE_MODE === 'web') {
 
     const { weekStartDay, todoist } = getInitialSettings()
 
-    const showAgenda3 = () => {
+    const showAgenda3 = async () => {
       track('Show Agenda', { version: __APP_VERSION__ })
-      if (window.isMounted !== true) {
-        renderApp(true)
+      if (window.isMounted !== true || window.currentApp !== 'agenda3App') {
+        await renderApp(true)
         window.isMounted = true
       }
       setPluginTheme('light')
-      logseq.showMainUI()
+      logseq.showMainUI({ autoFocus: true })
     }
 
     // ===== logseq plugin model start =====
@@ -126,6 +126,8 @@ if (import.meta.env.VITE_MODE === 'web') {
     logseq.on('ui:visible:changed', (e) => {
       if (!e.visible && window.currentApp !== 'pomodoro' && window.currentApp !== 'agenda3App') {
         root && root.unmount()
+        root = null
+        window.isMounted = false
       }
     })
     listenEsc(() => logseq.hideMainUI())
@@ -160,7 +162,7 @@ if (import.meta.env.VITE_MODE === 'web') {
     initializeDayjs(weekStartDay)
     // ========== dayjs end =========
 
-    const stopTaskEndNotifications = initializeTaskEndNotifications()
+    const stopTaskEndNotifications = initializeTaskEndNotifications(showAgenda3)
     logseq.beforeunload(async () => stopTaskEndNotifications())
 
     // ========== manage theme start =========
@@ -212,7 +214,7 @@ async function renderApp(isVersion3 = false) {
     body?.classList.remove('agenda3')
   }
 
-  root = createRoot(document.getElementById('root')!)
+  root ??= createRoot(document.getElementById('root')!)
   root.render(
     <React.StrictMode>{isVersion3 ? <Agenda3App /> : <MainApp defaultRoute={defaultRoute} />}</React.StrictMode>,
   )

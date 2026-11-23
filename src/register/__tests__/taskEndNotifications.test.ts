@@ -30,10 +30,14 @@ let notification: ReturnType<typeof vi.fn>
 let unsubscribe: ReturnType<typeof vi.fn>
 let unsubscribeSettings: ReturnType<typeof vi.fn>
 let settingsChanged: (settings: Settings, previous: Settings) => void
+let openAgenda: ReturnType<typeof vi.fn<[], Promise<void>>>
+let focus: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(end - 10_000)
+  openAgenda = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
+  focus = vi.spyOn(window, 'focus').mockImplementation(() => {})
   notification = vi.fn(function () {
     return { close: vi.fn() }
   })
@@ -70,7 +74,7 @@ afterEach(() => {
 })
 
 const launch = async () => {
-  stop = initializeTaskEndNotifications()
+  stop = initializeTaskEndNotifications(openAgenda)
   await vi.advanceTimersByTimeAsync(0)
 }
 
@@ -151,16 +155,53 @@ describe('background task-end notifications', () => {
     expect(getAgendaEntities).not.toHaveBeenCalled()
   })
 
-  test('opens the task only in its original graph', async () => {
+  test('focuses Logseq and opens Agenda instead of navigating to the block', async () => {
     await launch()
     await vi.advanceTimersByTimeAsync(10_000)
     const toast = notification.mock.results[0].value
     await toast.onclick()
-    expect(logseq.App.pushState).toHaveBeenCalledWith('page', { name: task.id })
-    vi.mocked(logseq.App.pushState).mockClear()
-    vi.mocked(logseq.App.getCurrentGraph).mockResolvedValue({ url: 'graph-b' } as never)
-    await toast.onclick()
+    expect(toast.close).toHaveBeenCalledOnce()
+    expect(focus).toHaveBeenCalledOnce()
+    expect(openAgenda).toHaveBeenCalledOnce()
+    expect(logseq.hideMainUI).not.toHaveBeenCalled()
     expect(logseq.App.pushState).not.toHaveBeenCalled()
+  })
+
+  test('opens the current Agenda after switching graphs without following a stale task ID', async () => {
+    await launch()
+    await vi.advanceTimersByTimeAsync(10_000)
+    const toast = notification.mock.results[0].value
+    vi.mocked(logseq.App.getCurrentGraph).mockResolvedValue({ url: 'graph-b' } as never)
+    graphChanged()
+    await toast.onclick()
+    expect(openAgenda).toHaveBeenCalledOnce()
+    expect(logseq.App.pushState).not.toHaveBeenCalled()
+  })
+
+  test('the test notification uses the same opener even without a task ID', async () => {
+    await launch()
+    await testTaskEndNotification()
+    await notification.mock.results[0].value.onclick()
+    expect(openAgenda).toHaveBeenCalledOnce()
+    expect(focus).toHaveBeenCalledOnce()
+  })
+
+  test('waits for the Agenda opener and reports failures without an unhandled rejection', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await launch()
+    await testTaskEndNotification()
+    openAgenda.mockRejectedValueOnce(new Error('Mount failed'))
+    await expect(notification.mock.results[0].value.onclick()).resolves.toBeUndefined()
+    expect(logseq.UI.showMsg).toHaveBeenCalledWith(expect.stringContaining('Could not open Agenda'), 'error')
+  })
+
+  test('unloading detaches the opener from notifications that are still visible', async () => {
+    await launch()
+    await testTaskEndNotification()
+    stop!()
+    stop = undefined
+    await notification.mock.results[0].value.onclick()
+    expect(openAgenda).not.toHaveBeenCalled()
   })
 
   test('does not deliver an in-flight result after being disabled', async () => {
