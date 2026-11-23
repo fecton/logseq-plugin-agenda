@@ -30,16 +30,10 @@ let notification: ReturnType<typeof vi.fn>
 let unsubscribe: ReturnType<typeof vi.fn>
 let unsubscribeSettings: ReturnType<typeof vi.fn>
 let settingsChanged: (settings: Settings, previous: Settings) => void
-let openAgenda: ReturnType<typeof vi.fn<[], Promise<void>>>
-let focus: ReturnType<typeof vi.spyOn>
-let callWin: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(end - 10_000)
-  openAgenda = vi.fn<[], Promise<void>>().mockResolvedValue(undefined)
-  focus = vi.spyOn(window, 'focus').mockImplementation(() => {})
-  callWin = vi.fn().mockResolvedValue(false)
   notification = vi.fn(function () {
     return { close: vi.fn() }
   })
@@ -63,7 +57,6 @@ beforeEach(() => {
     },
     UI: { showMsg: vi.fn() },
     hideMainUI: vi.fn(),
-    _callWin: callWin,
   })
   vi.mocked(getAgendaEntities).mockReset().mockResolvedValue([task])
 })
@@ -77,7 +70,7 @@ afterEach(() => {
 })
 
 const launch = async () => {
-  stop = initializeTaskEndNotifications(openAgenda)
+  stop = initializeTaskEndNotifications()
   await vi.advanceTimersByTimeAsync(0)
 }
 
@@ -158,109 +151,16 @@ describe('background task-end notifications', () => {
     expect(getAgendaEntities).not.toHaveBeenCalled()
   })
 
-  test('focuses Logseq and opens Agenda instead of navigating to the block', async () => {
+  test('opens the task only in its original graph', async () => {
     await launch()
     await vi.advanceTimersByTimeAsync(10_000)
     const toast = notification.mock.results[0].value
     await toast.onclick()
-    expect(toast.close).toHaveBeenCalledOnce()
-    expect(callWin).toHaveBeenNthCalledWith(1, 'isMinimized')
-    expect(callWin).toHaveBeenNthCalledWith(2, 'show')
-    expect(callWin).toHaveBeenNthCalledWith(3, 'focus')
-    expect(callWin).not.toHaveBeenCalledWith('restore')
-    expect(focus).not.toHaveBeenCalled()
-    expect(openAgenda).toHaveBeenCalledOnce()
-    expect(logseq.hideMainUI).not.toHaveBeenCalled()
-    expect(logseq.App.pushState).not.toHaveBeenCalled()
-  })
-
-  test('restores a minimized native window before showing and focusing it', async () => {
-    callWin.mockResolvedValueOnce(true)
-    await launch()
-    await testTaskEndNotification()
-    await notification.mock.results[0].value.onclick()
-    expect(callWin.mock.calls).toEqual([['isMinimized'], ['restore'], ['show'], ['focus']])
-    expect(openAgenda).toHaveBeenCalledOnce()
-  })
-
-  test('opens Agenda without waiting for the window bridge to respond', async () => {
-    let resolve!: (minimized: boolean) => void
-    callWin.mockReturnValueOnce(new Promise((r) => (resolve = r)))
-    await launch()
-    await testTaskEndNotification()
-    const click = notification.mock.results[0].value.onclick()
-    expect(openAgenda).toHaveBeenCalledOnce()
-    resolve(false)
-    await click
-  })
-
-  test('a rejected native focus request does not prevent Agenda opening', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    callWin.mockRejectedValueOnce(new Error('Bridge unavailable'))
-    await launch()
-    await testTaskEndNotification()
-    await expect(notification.mock.results[0].value.onclick()).resolves.toBeUndefined()
-    expect(openAgenda).toHaveBeenCalledOnce()
-    expect(logseq.UI.showMsg).not.toHaveBeenCalled()
-  })
-
-  test('falls back to DOM focus on hosts without the desktop window bridge', async () => {
-    Object.assign(logseq, { _callWin: undefined })
-    await launch()
-    await testTaskEndNotification()
-    await notification.mock.results[0].value.onclick()
-    expect(focus).toHaveBeenCalledOnce()
-    expect(openAgenda).toHaveBeenCalledOnce()
-  })
-
-  test('a throwing DOM focus fallback does not prevent Agenda opening', async () => {
-    Object.assign(logseq, { _callWin: undefined })
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    focus.mockImplementation(() => {
-      throw new Error('Focus denied')
-    })
-    await launch()
-    await testTaskEndNotification()
-    await expect(notification.mock.results[0].value.onclick()).resolves.toBeUndefined()
-    expect(openAgenda).toHaveBeenCalledOnce()
-    expect(logseq.UI.showMsg).not.toHaveBeenCalled()
-  })
-
-  test('opens the current Agenda after switching graphs without following a stale task ID', async () => {
-    await launch()
-    await vi.advanceTimersByTimeAsync(10_000)
-    const toast = notification.mock.results[0].value
+    expect(logseq.App.pushState).toHaveBeenCalledWith('page', { name: task.id })
+    vi.mocked(logseq.App.pushState).mockClear()
     vi.mocked(logseq.App.getCurrentGraph).mockResolvedValue({ url: 'graph-b' } as never)
-    graphChanged()
     await toast.onclick()
-    expect(openAgenda).toHaveBeenCalledOnce()
     expect(logseq.App.pushState).not.toHaveBeenCalled()
-  })
-
-  test('the test notification uses the same opener even without a task ID', async () => {
-    await launch()
-    await testTaskEndNotification()
-    await notification.mock.results[0].value.onclick()
-    expect(openAgenda).toHaveBeenCalledOnce()
-    expect(callWin).toHaveBeenCalledWith('focus')
-  })
-
-  test('waits for the Agenda opener and reports failures without an unhandled rejection', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-    await launch()
-    await testTaskEndNotification()
-    openAgenda.mockRejectedValueOnce(new Error('Mount failed'))
-    await expect(notification.mock.results[0].value.onclick()).resolves.toBeUndefined()
-    expect(logseq.UI.showMsg).toHaveBeenCalledWith(expect.stringContaining('Could not open Agenda'), 'error')
-  })
-
-  test('unloading detaches the opener from notifications that are still visible', async () => {
-    await launch()
-    await testTaskEndNotification()
-    stop!()
-    stop = undefined
-    await notification.mock.results[0].value.onclick()
-    expect(openAgenda).not.toHaveBeenCalled()
   })
 
   test('does not deliver an in-flight result after being disabled', async () => {

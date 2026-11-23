@@ -4,23 +4,6 @@ import type { Settings } from '@/Agenda3/models/settings'
 
 const POLL_INTERVAL = 10_000
 const MAX_LATENESS = 5 * 60_000
-let openAgendaFromNotification: (() => void | Promise<void>) | undefined
-
-const focusLogseqWindow = async () => {
-  // DOM focus only reaches the plugin frame. Logseq's desktop bridge targets the
-  // owning Electron window, including when it is minimized or hidden in the tray.
-  // This SDK bridge is internal, so guard it for other Logseq hosts/versions.
-  const desktopLogseq = logseq as typeof logseq & {
-    _callWin?: (method: 'isMinimized' | 'restore' | 'show' | 'focus') => Promise<unknown>
-  }
-  if (typeof desktopLogseq._callWin === 'function') {
-    if ((await desktopLogseq._callWin('isMinimized')) === true) await desktopLogseq._callWin('restore')
-    await desktopLogseq._callWin('show')
-    await desktopLogseq._callWin('focus')
-  } else {
-    window.top?.focus()
-  }
-}
 
 export const showTaskEndNotification = (task: TaskEndNotification, graph: string) => {
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
@@ -32,17 +15,10 @@ export const showTaskEndNotification = (task: TaskEndNotification, graph: string
   })
   notification.onclick = async () => {
     notification.close()
-    if (!openAgendaFromNotification) return
-    try {
-      // Open in the current graph, independently of native window activation:
-      // an unavailable or failing focus bridge must not prevent Agenda opening.
-      await Promise.all([
-        focusLogseqWindow().catch((error) => console.warn('[Agenda] Could not focus the Logseq window:', error)),
-        openAgendaFromNotification(),
-      ])
-    } catch (error) {
-      console.error('[Agenda] Could not open Agenda from the notification:', error)
-      logseq.UI.showMsg('Could not open Agenda. Please use the Agenda toolbar button.', 'error')
+    // Never navigate to a block in a different graph after a graph switch.
+    if ((await logseq.App.getCurrentGraph())?.url === graph && task.id) {
+      logseq.hideMainUI()
+      logseq.App.pushState('page', { name: task.id })
     }
   }
   notification.onerror = () => console.error('[Agenda] Could not display the task-end notification.')
@@ -55,7 +31,7 @@ export const testTaskEndNotification = async () => {
   const graph = await logseq.App.getCurrentGraph()
   if (
     !showTaskEndNotification(
-      { id: '', title: 'Test notification — click to open Agenda.', end: Date.now() },
+      { id: '', title: 'Test notification — scheduled task alerts are ready.', end: Date.now() },
       graph?.url ?? '',
     )
   ) {
@@ -64,8 +40,7 @@ export const testTaskEndNotification = async () => {
 }
 
 /** Lives outside React so alerts also work before Agenda is opened and while it is hidden. */
-export const initializeTaskEndNotifications = (openAgenda: () => void | Promise<void>) => {
-  openAgendaFromNotification = openAgenda
+export const initializeTaskEndNotifications = () => {
   let lastCheck = Date.now()
   let graphUrl: string | undefined
   let generation = 0
@@ -131,6 +106,5 @@ export const initializeTaskEndNotifications = (openAgenda: () => void | Promise<
     clearTimeout(timer)
     unsubscribe()
     unsubscribeSettings()
-    if (openAgendaFromNotification === openAgenda) openAgendaFromNotification = undefined
   }
 }
