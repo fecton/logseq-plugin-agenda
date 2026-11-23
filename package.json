@@ -1,10 +1,19 @@
 {
   "name": "logseq-plugin-agenda",
-  "version": "3.13.1",
+  "version": "3.14.0",
+  "repo": "fecton/logseq-plugin-agenda",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fecton/logseq-plugin-agenda.git"
+  },
+  "title": "Agenda (fecton)",
+  "author": "haydenull (upstream), fecton (fork)",
+  "description": "Agenda calendar and task manager with scheduled task-end notifications",
+  "effect": true,
   "main": "dist/index.html",
   "private": true,
   "logseq": {
-    "id": "logseq-plugin-agenda",
+    "id": "logseq-agenda-fecton",
     "icon": "logo.png"
   },
   "scripts": {

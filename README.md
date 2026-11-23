@@ -1,6 +1,10 @@
 # logseq-plugin-agenda
 > A calendar plugin for logseq
 
+This is the [fecton fork](https://github.com/fecton/logseq-plugin-agenda) of [haydenull's Agenda](https://github.com/haydenull/logseq-plugin-agenda), including scheduled task-end notifications. Installable ZIP packages are available in this fork's [releases](https://github.com/fecton/logseq-plugin-agenda/releases).
+
+The fork appears as **Agenda (fecton)** and uses the plugin ID `logseq-agenda-fecton`. Its distinct ID keeps Logseq's marketplace updater from replacing it with the upstream plugin. When replacing an existing Agenda installation, preserve its settings and layout files under the new ID and remove the old plugin from the active plugins directory. Then enable task-end notifications in General Settings. Existing graph tasks do not need conversion.
+
 [![latest release version](https://img.shields.io/github/v/release/haydenull/logseq-plugin-agenda)](https://github.com/haydenull/logseq-plugin-agenda/releases)
 [![License](https://img.shields.io/github/license/haydenull/logseq-plugin-agenda?color=blue)](https://github.com/haydenull/logseq-plugin-agenda/blob/main/LICENSE)
 

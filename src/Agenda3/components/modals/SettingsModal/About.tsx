@@ -17,7 +17,7 @@ const About = () => {
       <div className="flex h-14 items-center border-b pl-4 text-lg font-semibold">{t('About')}</div>
       <div className="flex flex-col items-center justify-center pb-6">
         <img src={logo} className="mt-6 w-20" />
-        <h1 className="text-xl">Agenda</h1>
+        <h1 className="text-xl">Agenda (fecton)</h1>
         <div className="text-gray-400">
           {t('version')}: v{__APP_VERSION__}
         </div>
@@ -28,7 +28,7 @@ const About = () => {
           >
             {t('User Manual')}
           </a>
-          <a className="pl-2" onClick={() => onClickLink('https://github.com/haydenull/logseq-plugin-agenda')}>
+          <a className="pl-2" onClick={() => onClickLink('https://github.com/fecton/logseq-plugin-agenda')}>
             {t('Github Repo')}
           </a>
         </div>
