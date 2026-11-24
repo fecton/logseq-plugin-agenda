@@ -15,11 +15,9 @@ import { useTheme } from '@/Agenda3/components/ThemeProvider'
 import { genDurationString } from '@/Agenda3/helpers/block'
 import { transformAgendaTaskToCalendarEvent } from '@/Agenda3/helpers/fullCalendar'
 import { track } from '@/Agenda3/helpers/umami'
-import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
-import { recentTasksAtom } from '@/Agenda3/models/entities/tasks'
+import useSessionScheduling from '@/Agenda3/hooks/useSessionScheduling'
+import { calendarTasksAtom } from '@/Agenda3/models/entities/tasks'
 import { settingsAtom } from '@/Agenda3/models/settings'
-import { DEFAULT_ESTIMATED_TIME } from '@/constants/agenda'
-import type { CalendarEvent } from '@/types/fullcalendar'
 import { cn } from '@/util/util'
 
 import TaskModal from '../modals/TaskModal'
@@ -27,18 +25,6 @@ import { type CreateTaskForm } from '../modals/TaskModal/useCreate'
 import TheCalendarEvent from './TheCalendarEvent'
 import s from './timebox.module.less'
 
-type FullCalendarEventInfo = {
-  event: CalendarEvent
-  oldEvent: CalendarEvent
-  relatedEvents: unknown[]
-  revert: () => void
-  newResource: unknown
-  oldResource: unknown
-  delta: unknown
-  view: unknown
-  el: HTMLElement
-  jsEvent: MouseEvent
-}
 const FULL_CALENDAR_24HOUR_FORMAT = {
   hour: '2-digit',
   minute: '2-digit',
@@ -50,12 +36,12 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
   const settings = useAtomValue(settingsAtom)
   const groupType = settings.selectedFilters?.length ? 'filter' : 'page'
   const calendarRef = useRef<FullCalendar>(null)
-  const { updateEntity } = useAgendaEntities()
-  const recentTasks = useAtomValue(recentTasksAtom)
+  const onEventScheduleUpdate = useSessionScheduling()
+  const recentTasks = useAtomValue(calendarTasksAtom)
   const now = dayjs()
   const calendarEvents = recentTasks
     // TODO: 补充 deadline 任务的处理后移除次过滤器
-    .filter((task) => task.start)
+    .filter((task) => !settings.viewOptions?.hideCompleted || task.status !== 'done')
     .map((task) =>
       transformAgendaTaskToCalendarEvent(task, {
         showFirstEventInCycleOnly: settings.viewOptions?.showFirstEventInCycleOnly,
@@ -88,41 +74,6 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
   //     task: _info.event.extendedProps,
   //   })
   // }
-
-  const onEventScheduleUpdate = (info: unknown) => {
-    const calendarApi = calendarRef.current?.getApi()
-    const _info = info as FullCalendarEventInfo
-    console.log('[faiz:] === eventResize', _info)
-    const { start, end, id: blockUUID, extendedProps: task } = _info.event
-    const startDay = dayjs(start)
-    const span = dayjs(end).diff(start, 'minute')
-    // 原本没有设置 estimatedTime 时，除非新的预估时间不等于默认预估时间，否则仍不修改 estimatedTime
-    const estimatedTime = task.estimatedTime || span !== DEFAULT_ESTIMATED_TIME ? span : undefined
-    try {
-      updateEntity({
-        type: 'task-date',
-        id: blockUUID,
-        data: {
-          start: startDay,
-          estimatedTime,
-          allDay: false,
-        },
-      })
-      const event = calendarApi?.getEventById(blockUUID)
-      if (event) {
-        event.setProp('extendedProps', {
-          ...event.extendedProps,
-          start: startDay,
-          allDay: false,
-          estimatedTime,
-        })
-      }
-    } catch (error) {
-      logseq.UI.showMsg('resize failed')
-      _info.revert()
-      console.error('[Agenda3] timebox resize failed', error)
-    }
-  }
 
   const onClickNav = (action: 'prev' | 'next' | 'today') => {
     const calendarApi = calendarRef.current?.getApi()
@@ -162,6 +113,7 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
         </div>
       </div>
       <FullCalendar
+        slotEventOverlap={false}
         droppable
         editable
         selectable
@@ -183,17 +135,17 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
         slotLabelFormat={FULL_CALENDAR_24HOUR_FORMAT}
         // drag external kanban element to calendar
         eventReceive={(info) => {
-          onEventScheduleUpdate(info)
+          void onEventScheduleUpdate(info, true)
           track('Time Box: Receive Event')
         }}
         // resize duration
         eventResize={(info) => {
-          onEventScheduleUpdate(info)
+          void onEventScheduleUpdate(info)
           track('Time Box: Resize Event')
         }}
         // drag move
         eventDrop={(info) => {
-          onEventScheduleUpdate(info)
+          void onEventScheduleUpdate(info)
           track('Time Box: Move Event')
         }}
         // click

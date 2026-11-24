@@ -81,5 +81,13 @@
   "End date must not precede start date": "End date must not precede start date",
   "Title cannot be empty": "Title cannot be empty",
   "Pleasse specify start or deadline": "Pleasse specify start or deadline",
-  "This configuration requires reloading the page to take effect.": "This configuration requires reloading the page to take effect."
+  "This configuration requires reloading the page to take effect.": "This configuration requires reloading the page to take effect.",
+  "Sessions": "Sessions",
+  "Add session": "Add session",
+  "Remove session": "Remove session",
+  "Session start": "Session start",
+  "Session duration": "Session duration",
+  "Planned time": "Planned time",
+  "Sessions manage this task’s schedule. Each box can be moved separately.": "Sessions manage this task’s schedule. Each box can be moved separately.",
+  "Delete task": "Delete task"
 }

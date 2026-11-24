@@ -81,5 +81,13 @@
   "Exit": "退出",
   "Title cannot be empty": "标题不能为空",
   "Pleasse specify start or deadline": "请指定开始或截止日期",
-  "This configuration requires reloading the page to take effect.": "此配置需要重新加载页面才能生效。"
+  "This configuration requires reloading the page to take effect.": "此配置需要重新加载页面才能生效。",
+  "Sessions": "时段",
+  "Add session": "添加时段",
+  "Remove session": "移除时段",
+  "Session start": "时段开始",
+  "Session duration": "时段时长",
+  "Planned time": "计划时长",
+  "Sessions manage this task’s schedule. Each box can be moved separately.": "此任务通过时段管理日程，每个时间块都可以单独移动。",
+  "Delete task": "删除任务"
 }

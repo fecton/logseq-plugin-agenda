@@ -1,12 +1,19 @@
 import dayjs from 'dayjs'
 import { atom } from 'jotai'
 
+import { getTaskSessions } from '@/Agenda3/helpers/taskSessions'
 import { RECENT_DAYS_RANGE } from '@/constants/agenda'
 import type { AgendaTaskWithStart, AgendaTaskWithStartOrDeadline } from '@/types/task'
 
 import { agendaEntitiesAtom } from './entities'
 import { needsReviewAtom } from './needsReview'
 import { agendaObjectivesAtom } from './objectives'
+
+export const calendarTasksAtom = atom((get) =>
+  get(agendaEntitiesAtom).filter(
+    (task) => !task.objective && (task.start || task.deadline || task.sessions?.length || task.timeLogs?.length),
+  ),
+)
 
 // task
 export const tasksWithStartAtom = atom<AgendaTaskWithStart[]>((get) => {
@@ -41,6 +48,12 @@ export const recentTasksAtom = atom<AgendaTaskWithStartOrDeadline[]>((get) => {
   const startDay = today.subtract(rangeStart, 'day')
   const endDay = today.add(rangeEnd, 'day')
   return allTasks.filter((task) => {
+    if (
+      getTaskSessions(task).some(
+        (session) => session.start.isSameOrBefore(endDay, 'day') && session.end.isSameOrAfter(startDay, 'day'),
+      )
+    )
+      return true
     if (task.start) {
       return (
         task.start?.isBetween(startDay, endDay, 'day', '[]') ||

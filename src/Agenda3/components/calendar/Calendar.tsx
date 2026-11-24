@@ -14,13 +14,13 @@ import { genDurationString } from '@/Agenda3/helpers/block'
 import { transformAgendaTaskToCalendarEvent } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
 import { track } from '@/Agenda3/helpers/umami'
-import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
+import useSessionScheduling from '@/Agenda3/hooks/useSessionScheduling'
 import { appAtom } from '@/Agenda3/models/app'
-import { tasksWithStartOrDeadlineAtom } from '@/Agenda3/models/entities/tasks'
+import { calendarTasksAtom } from '@/Agenda3/models/entities/tasks'
 import { logseqAtom } from '@/Agenda3/models/logseq'
 import { settingsAtom } from '@/Agenda3/models/settings'
 // import useTheme from '@/hooks/useTheme'
-import type { AgendaTaskWithStart } from '@/types/task'
+import type { AgendaEntity } from '@/types/entity'
 import { cn } from '@/util/util'
 
 import TaskModal from '../modals/TaskModal'
@@ -41,8 +41,8 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
   const calendarRef = useRef<FullCalendar>(null)
   const { currentTheme: theme } = useTheme()
   const app = useAtomValue(appAtom)
-  const { updateEntity } = useAgendaEntities()
-  const tasksWithStartOrDeadline = useAtomValue(tasksWithStartOrDeadlineAtom)
+  const onEventScheduleUpdate = useSessionScheduling()
+  const tasksWithStartOrDeadline = useAtomValue(calendarTasksAtom)
   const settings = useAtomValue(settingsAtom)
   const { currentGraph } = useAtomValue(logseqAtom)
   const startingDay = settings.general?.startOfWeek
@@ -63,7 +63,8 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
 
   const [editTaskModal, setEditTaskModal] = useState<{
     open: boolean
-    task?: AgendaTaskWithStart
+    task?: AgendaEntity
+    sessionId?: string
   }>({
     open: false,
   })
@@ -80,42 +81,12 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
   const onEventClick = (info: EventClickArg) => {
     setEditTaskModal({
       open: true,
-      task: info.event.extendedProps as AgendaTaskWithStart,
+      task: info.event.extendedProps as AgendaEntity,
+      sessionId: info.event.extendedProps.sessionId,
     })
   }
   const onEventCtrlClick = (info: EventClickArg) => {
-    navToLogseqBlock(info.event.extendedProps as AgendaTaskWithStart, currentGraph)
-  }
-  const onEventScheduleUpdate = (info: EventResizeDoneArg | EventReceiveArg | EventDropArg) => {
-    // const calendarApi = calendarRef.current?.getApi()
-    const { start, end, id: blockUUID, allDay, extendedProps } = info.event
-    const startDay = dayjs(start)
-    // const estimatedTime = dayjs(end).diff(start, 'minute')
-    const endDay = dayjs(end).subtract(1, 'day')
-    const isMultipleDay = end && allDay ? !dayjs(end).isSame(endDay, 'day') : false
-    const dateInfo = {
-      start: startDay,
-      estimatedTime: allDay ? extendedProps.estimatedTime : dayjs(end).diff(start, 'minute'),
-      end: isMultipleDay ? endDay : undefined,
-      allDay,
-    }
-    try {
-      updateEntity({ type: 'task-date', id: blockUUID, data: dateInfo })
-      // const event = calendarApi?.getEventById(blockUUID)
-      // if (event) {
-      //   event.setProp('extendedProps', {
-      //     ...event.extendedProps,
-      //     ...dateInfo,
-      //   })
-      // }
-
-      // refreshAllTasks()
-      // 其他天移动到今天的 timebox，需要对应移动 kanban
-    } catch (error) {
-      logseq.UI.showMsg('resize failed')
-      info.revert()
-      console.error('[Agenda3] calendar resize failed', error)
-    }
+    navToLogseqBlock(info.event.extendedProps as AgendaEntity, currentGraph)
   }
   const onSelect = (info: DateSelectArg) => {
     if (info.allDay) {
@@ -185,6 +156,7 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
       }}
     >
       <FullCalendar
+        slotEventOverlap={false}
         droppable
         editable
         selectable
@@ -223,17 +195,17 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
         }}
         // drag external kanban element to calendar
         eventReceive={(info) => {
-          onEventScheduleUpdate(info)
+          void onEventScheduleUpdate(info, true)
           track('Calendar: Receive Event', { calendarView: info.view.type })
         }}
         // resize duration
         eventResize={(info) => {
-          onEventScheduleUpdate(info)
+          void onEventScheduleUpdate(info)
           track('Calendar: Resize Event', { calendarView: info.view.type })
         }}
         // drag move
         eventDrop={(info) => {
-          onEventScheduleUpdate(info)
+          void onEventScheduleUpdate(info)
           track('Calendar: Move Event', { calendarView: info.view.type })
         }}
         // click event
@@ -291,6 +263,7 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
           info={{
             type: 'edit',
             initialTaskData: editTaskModal.task,
+            sessionId: editTaskModal.sessionId,
           }}
           onOk={() => {
             setEditTaskModal({ open: false })

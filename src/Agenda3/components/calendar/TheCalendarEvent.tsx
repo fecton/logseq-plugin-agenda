@@ -12,7 +12,9 @@ import TaskSizeBadge from '../TaskSizeBadge'
 
 const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
   const taskData = info.event.extendedProps
-  const showTitle = taskData?.id ? taskData.showTitle : info.event.title
+  const showTitle = `${taskData.eventKind === 'time-log' ? 'Actual · ' : ''}${
+    taskData?.id ? taskData.showTitle : info.event.title
+  }`
   const isShowTimeText = info.event.allDay === false && dayjs(info.event.end).diff(info.event.start, 'minute') > 50
   const isSmallHeight = info.event.allDay === false && dayjs(info.event.end).diff(info.event.start, 'minute') <= 20
   const isDone = taskData?.status === 'done'

@@ -93,7 +93,13 @@ const CycleColumn = ({
                 startDay = replaceDateInfo(task.start, day)
               }
               try {
-                await updateEntity({ type: 'task-date', id, data: { start: startDay, allDay: task.allDay } })
+                if (task.sessions !== undefined) {
+                  await updateEntity({
+                    type: 'task-session',
+                    id,
+                    data: { type: 'add', id: crypto.randomUUID(), start: startDay },
+                  })
+                } else await updateEntity({ type: 'task-date', id, data: { start: startDay, allDay: task.allDay } })
                 track('KanBan: Drag Task')
               } catch (error) {
                 logseq.UI.showMsg(t('Could not save task. Please try again.'), 'error')

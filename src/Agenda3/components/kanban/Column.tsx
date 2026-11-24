@@ -1,5 +1,5 @@
 import { ThirdPartyDraggable } from '@fullcalendar/interaction'
-import { Progress } from 'antd'
+import { Progress, message } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useAtomValue } from 'jotai'
 import { useEffect, useImperativeHandle, useRef } from 'react'
@@ -7,6 +7,7 @@ import React from 'react'
 import { ReactSortable } from 'react-sortablejs'
 
 import { sortKanbanTasks } from '@/Agenda3/helpers/taskPriority'
+import { loggedMinutesOnDay } from '@/Agenda3/helpers/taskSessions'
 import { track } from '@/Agenda3/helpers/umami'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import { appAtom } from '@/Agenda3/models/app'
@@ -35,18 +36,54 @@ const Column = ({ day, tasks, allKanbanItems }: ColumnProps, ref) => {
   const undoneTasks = tasks.filter((task) => task.status !== 'done')
   const _dayTasks = sortKanbanTasks(tasks)
   const estimatedTime = _dayTasks.reduce((acc, task) => {
-    return acc + (task.estimatedTime ?? DEFAULT_ESTIMATED_TIME)
+    return acc + (task.dayPlannedMinutes ?? task.estimatedTime ?? DEFAULT_ESTIMATED_TIME)
   }, 0)
   const actualTime = _dayTasks.reduce((acc, task) => {
-    return acc + (task.actualTime ?? task.estimatedTime ?? DEFAULT_ESTIMATED_TIME)
+    return (
+      acc +
+      (task.sessionDay
+        ? loggedMinutesOnDay(task, task.sessionDay)
+        : task.actualTime ?? task.estimatedTime ?? DEFAULT_ESTIMATED_TIME)
+    )
   }, 0)
 
   const { updateEntity } = useAgendaEntities()
 
   const onAddTaskByDrag = async (sortableEvent) => {
     console.log('[faiz:] === kanban onAdd', sortableEvent)
+    // Sortable can report its last hovered column when FullCalendar receives the drop.
+    const pointer = sortableEvent.originalEvent
+    const bounds = columnContainerRef.current?.getBoundingClientRect()
+    if (
+      pointer &&
+      bounds &&
+      (pointer.clientX < bounds.left ||
+        pointer.clientX > bounds.right ||
+        pointer.clientY < bounds.top ||
+        pointer.clientY > bounds.bottom)
+    ) {
+      sortableEvent.from?.insertBefore(sortableEvent.item, sortableEvent.from.children[sortableEvent.oldIndex] ?? null)
+      return
+    }
     const id = sortableEvent?.item?.dataset?.id
     const task = allKanbanItems.find((task) => task.id === id)
+    const sourceDay = sortableEvent?.item?.dataset?.sessionDay
+    if (task && sourceDay) {
+      try {
+        await updateEntity({
+          type: 'task-session',
+          id,
+          data: { type: 'move-day', from: sourceDay, to: day.format('YYYY-MM-DD') },
+        })
+      } catch (error) {
+        sortableEvent.from?.insertBefore(
+          sortableEvent.item,
+          sortableEvent.from.children[sortableEvent.oldIndex] ?? null,
+        )
+        message.error(error instanceof Error ? error.message : 'Could not move sessions.')
+      }
+      return
+    }
     // TODO: 支持拖拽修改 deadline
     if (!task?.start) return logseq.UI.showMsg('Drag task without start date is not supported', 'error')
     if (!task || !id) return logseq.UI.showMsg('task id not found', 'error')
@@ -55,7 +92,7 @@ const Column = ({ day, tasks, allKanbanItems }: ColumnProps, ref) => {
     if (task.allDay === false) {
       startDay = replaceDateInfo(task.start, day)
     }
-    updateEntity({
+    await updateEntity({
       type: 'task-date',
       id,
       data: {

@@ -9,7 +9,7 @@ export const showTaskEndNotification = (task: TaskEndNotification, graph: string
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return false
   const notification = new Notification('Agenda — scheduled time ended', {
     body: task.title,
-    tag: `agenda-task-end:${graph}:${task.id}:${task.end}`,
+    tag: `agenda-task-end:${graph}:${task.id}${task.sessionId ? ':' + task.sessionId : ''}:${task.end}`,
     silent: false,
     requireInteraction: true,
   })
@@ -89,7 +89,7 @@ export const initializeTaskEndNotifications = () => {
       const since = Math.max(lastCheck, now - MAX_LATENESS)
       for (const [key, end] of delivered) if (end < now - MAX_LATENESS) delivered.delete(key)
       for (const task of getDueTaskEndNotifications(entities, since, now)) {
-        const key = `${task.id}:${task.end}`
+        const key = `${task.id}${task.sessionId ? ':' + task.sessionId : ''}:${task.end}`
         if (!delivered.has(key) && showTaskEndNotification(task, graph.url)) delivered.set(key, task.end)
       }
       lastCheck = now

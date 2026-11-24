@@ -4,6 +4,8 @@ import { DEFAULT_ESTIMATED_TIME } from '@/constants/agenda'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
 
+import { getTaskSessions } from './taskSessions'
+
 export type OverdueTask = {
   task: AgendaTaskWithStartOrDeadline
   reasons: ('schedule' | 'deadline')[]
@@ -19,7 +21,10 @@ export function classifyNeedsReview(entities: AgendaEntity[], now: Dayjs) {
   for (const task of entities) {
     if (task.status !== 'todo' || task.objective || task.recurringPast || seen.has(task.id)) continue
     seen.add(task.id)
-    const scheduledEnd = task.start
+    const sessions = getTaskSessions(task)
+    const scheduledEnd = sessions.length
+      ? sessions.reduce((end, session) => (session.end.isAfter(end) ? session.end : end), sessions[0].end)
+      : task.start
       ? task.end ?? (task.allDay ? task.start : task.start.add(task.estimatedTime ?? DEFAULT_ESTIMATED_TIME, 'minute'))
       : undefined
     const missedSchedule = scheduledEnd?.isValid() && scheduledEnd.isBefore(today, 'day')

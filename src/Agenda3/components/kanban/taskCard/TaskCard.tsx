@@ -7,6 +7,7 @@ import { VscDebugConsole } from 'react-icons/vsc'
 
 import { minutesToHHmm } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
+import { nextSessionDuration } from '@/Agenda3/helpers/taskSessions'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import { logseqAtom } from '@/Agenda3/models/logseq'
 import { settingsAtom } from '@/Agenda3/models/settings'
@@ -34,7 +35,7 @@ const TaskCard = ({ task }: { task: AgendaTaskWithStartOrDeadline }) => {
   const editDisabled = task.rrule || task.recurringPast
   const isMultipleDays = task.allDay && task.end
   const noStart = !task.start
-  const estimatedTime = task.estimatedTime ?? DEFAULT_ESTIMATED_TIME
+  const estimatedTime = nextSessionDuration(task)
 
   const { updateEntity, deleteEntity } = useAgendaEntities()
 
@@ -76,6 +77,7 @@ const TaskCard = ({ task }: { task: AgendaTaskWithStartOrDeadline }) => {
         color: groupType === 'page' ? task.project.bgColor : task?.filters?.[0]?.color,
       })}
       data-id={task.id}
+      data-session-day={task.sessionDay}
     >
       <Dropdown
         trigger={['contextMenu']}

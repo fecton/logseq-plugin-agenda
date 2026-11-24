@@ -14,6 +14,7 @@ import { genDays } from '@/util/util'
 
 import { parseAgendaDrawer } from './block'
 import { transformPageToProject } from './project'
+import { getTaskSessions } from './taskSessions'
 
 export const FREQ_ENUM_MAP = {
   hourly: RRuleClass.HOURLY,
@@ -276,9 +277,9 @@ export const transformBlockToAgendaEntity = async (
     status,
     title,
     showTitle,
-    start,
+    start: agendaDrawer?.sessions !== undefined ? agendaDrawer.sessions[0]?.start : start,
     end,
-    allDay,
+    allDay: agendaDrawer?.sessions !== undefined ? false : allDay,
     deadline,
     estimatedTime,
     actualTime,
@@ -296,6 +297,8 @@ export const transformBlockToAgendaEntity = async (
     bindObjectiveId,
     size: agendaDrawer?.size,
     priority: agendaDrawer?.priority,
+    sessions: agendaDrawer?.sessions,
+    sessionsError: agendaDrawer?.sessionsError,
     rawBlock: block,
   }
 }
@@ -353,7 +356,9 @@ export const separateTasksInDay = (
   const tasksMap = new Map<string, AgendaTaskWithStartOrDeadline[]>()
   tasks.forEach((task) => {
     if (!task.start && !task.deadline?.value) return
-    const taskDayStr = task.start
+    const taskDayStr = task.sessionDay
+      ? dayjs(task.sessionDay).format(DATE_FORMATTER_FOR_KEY)
+      : task.start
       ? task.start.format(DATE_FORMATTER_FOR_KEY)
       : task.deadline!.value.format(DATE_FORMATTER_FOR_KEY)
     if (tasksMap.has(taskDayStr)) {
@@ -380,6 +385,19 @@ export const transformTasksToKanbanTasks = (
   return tasks
     .map((task) => {
       const { allDay, end, start } = task
+      const sessions = getTaskSessions(task)
+      if (sessions.length) {
+        const days = [...new Set(sessions.map((session) => session.start.format('YYYY-MM-DD')))]
+        return days.map((sessionDay) => {
+          const daily = sessions.filter((session) => session.start.format('YYYY-MM-DD') === sessionDay)
+          return {
+            ...task,
+            sessionDay,
+            daySessionCount: daily.length,
+            dayPlannedMinutes: daily.reduce((sum, session) => sum + session.end.diff(session.start, 'minute'), 0),
+          }
+        })
+      }
 
       // splitting multi-days task into single-day tasks
       if (allDay && end && start) {

@@ -1,19 +1,52 @@
 import { DEFAULT_ESTIMATED_TIME } from '@/constants/agenda'
+import type { AgendaEntity } from '@/types/entity'
 import type { CalendarEvent } from '@/types/fullcalendar'
 import type { AgendaTaskWithDeadline, AgendaTaskWithStart, AgendaTaskWithStartOrDeadline } from '@/types/task'
 import { padZero } from '@/util/util'
+
+import { getTaskSessions } from './taskSessions'
 
 /**
  * transform agenda task to calendar event
  */
 export const transformAgendaTaskToCalendarEvent = (
-  task: AgendaTaskWithStartOrDeadline,
+  task: AgendaEntity,
   options: { showFirstEventInCycleOnly?: boolean; showTimeLog?: boolean; groupType: 'filter' | 'page' } = {
     groupType: 'page',
   },
 ): CalendarEvent[] => {
   const { showFirstEventInCycleOnly = false, showTimeLog = false, groupType } = options
   const { estimatedTime = DEFAULT_ESTIMATED_TIME, timeLogs = [], status, actualTime } = task
+  const sessions = getTaskSessions(task)
+  const logs: CalendarEvent[] = showTimeLog
+    ? timeLogs.map((log, index) => ({
+        id: `${task.id}:log:${index}`,
+        title: task.title,
+        allDay: false,
+        start: log.start.toDate(),
+        end: log.end.toDate(),
+        extendedProps: { ...task, eventKind: 'time-log' },
+        editable: false,
+        color: '#64748b',
+      }))
+    : []
+  if (sessions.length) {
+    return [
+      ...sessions.map(
+        (session): CalendarEvent => ({
+          id: `${task.id}:session:${session.id}`,
+          title: task.title,
+          allDay: false,
+          start: session.start.toDate(),
+          end: session.end.toDate(),
+          extendedProps: { ...task, eventKind: 'session', sessionId: session.id },
+          editable: !task.sessionsError,
+          color: groupType === 'page' ? task.project.bgColor : task.filters?.[0]?.color,
+        }),
+      ),
+      ...logs,
+    ]
+  }
   const rrule: CalendarEvent['rrule'] =
     showFirstEventInCycleOnly && task.rrule
       ? {
@@ -21,18 +54,8 @@ export const transformAgendaTaskToCalendarEvent = (
           count: 1,
         }
       : task.rrule
-  if (showTimeLog && status === 'done' && timeLogs.length) {
-    return timeLogs.map((log, index) => ({
-      id: task.id + '_' + index,
-      title: task.title,
-      allDay: false,
-      start: log.start.toDate(),
-      end: log.end.toDate(),
-      extendedProps: task,
-      editable: false,
-      color: groupType === 'page' ? task.project.bgColor : task.filters?.[0]?.color,
-    }))
-  }
+  if (showTimeLog && status === 'done' && timeLogs.length) return logs
+  if (!task.start && !task.deadline) return logs
   let spanTime: number
   let start: Date
   let end: Date
@@ -67,9 +90,10 @@ export const transformAgendaTaskToCalendarEvent = (
       rrule,
       // 只有时间点事件才能传 duration
       duration: allDay ? undefined : { minute: spanTime },
-      editable: !(task.recurringPast || task.rrule || !task.start),
+      editable: !(task.recurringPast || task.rrule || !task.start || task.sessionsError),
       color: groupType === 'page' ? task.project.bgColor : task.filters?.[0]?.color,
     },
+    ...logs,
   ]
 }
 

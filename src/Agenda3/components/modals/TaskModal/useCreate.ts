@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { parseDurationString } from '@/Agenda3/helpers/block'
+import { validateSessions, type PlannedSession } from '@/Agenda3/helpers/taskSessions'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { AgendaEntityDeadline } from '@/types/entity'
 import type { TaskPriority } from '@/types/taskPriority'
@@ -23,6 +24,7 @@ type BaseCreateTaskForm = {
   bindObjectiveId?: string
   size?: TaskSize
   priority?: TaskPriority
+  sessions?: PlannedSession[]
 }
 export type CreateTaskForm =
   | (BaseCreateTaskForm & {
@@ -63,7 +65,8 @@ const useCreate = (initialData: Partial<CreateTaskForm> | null, messageApi: Mess
     }))
   }
   const create = async () => {
-    if (!start && !deadline) {
+    if (formData.sessions !== undefined) validateSessions(formData.sessions)
+    if (!start && !deadline && formData.sessions === undefined) {
       return messageApi.error(t('Pleasse specify start or deadline'))
     }
     if (formData.title?.trim()?.length === 0) {
@@ -82,6 +85,7 @@ const useCreate = (initialData: Partial<CreateTaskForm> | null, messageApi: Mess
         bindObjectiveId: formData.bindObjectiveId,
         size: formData.size,
         priority: formData.priority,
+        sessions: formData.sessions,
       },
     })
   }

@@ -5,6 +5,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { useCallback } from 'react'
 
 import { transformBlockToAgendaEntity } from '@/Agenda3/helpers/task'
+import { serializeTaskWrite, type SessionOperation } from '@/Agenda3/helpers/taskSessions'
 import { settingsAtom } from '@/Agenda3/models/settings'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaObjective } from '@/types/objective'
@@ -22,6 +23,7 @@ import {
   updateBlockTaskStatus,
   updateObjectiveBlock,
   updateTaskBlock,
+  updateBlockSessions,
 } from '../helpers/block'
 import { agendaEntitiesAtom, invalidateEntitiesAtom, refreshEntitiesAtom } from '../models/entities/entities'
 
@@ -41,9 +43,10 @@ const useAgendaEntities = () => {
       | {
           type: 'task'
           id: string
-          data: AgendaTaskWithStartOrDeadline & { projectId?: string }
+          data: AgendaEntity & { projectId?: string }
           originalTask?: AgendaEntity
         }
+      | { type: 'task-session'; id: string; data: SessionOperation }
       | {
           type: 'task-date'
           id: string
@@ -69,76 +72,80 @@ const useAgendaEntities = () => {
           id: string
           data: AgendaObjective['status']
         },
-  ) => {
-    const { type, id, data } = params
-    const task = entities.find((task) => task.id === id)
-    if (!task) {
-      message.error('Entity not found')
-      throw new Error('Entity not found')
-    }
-    let rawBlock: BlockEntity | null = null
-    invalidate()
-    switch (type) {
-      case 'task':
-        rawBlock = await updateTaskBlock(data, params.originalTask)
-        break
-      case 'task-date':
-        rawBlock = await updateBlockDateInfo({
-          ...data,
-          uuid: id,
-        })
-        break
-      case 'task-status':
-      case 'objective-status':
-        rawBlock = await updateBlockTaskStatus(task, data)
-        break
-      case 'task-remove-date':
-        rawBlock = await deleteBlockDateInfo(id)
-        break
-      case 'objective':
-        // 如果执行到这个分支，说明 task.objective 一定存在
-        rawBlock = await updateObjectiveBlock({
-          ...task,
-          ...data,
-        } as AgendaObjective)
-        break
-      default:
-        break
-    }
-    const block = await transformBlockToBlockFromQuery(rawBlock)
-    if (!block) {
-      message.error('Failed to edit block')
-      throw new Error('Failed to edit block')
-    }
+  ) =>
+    serializeTaskWrite(params.id, async () => {
+      const { type, id, data } = params
+      const task = entities.find((task) => task.id === id)
+      if (!task) {
+        message.error('Entity not found')
+        throw new Error('Entity not found')
+      }
+      let rawBlock: BlockEntity | null = null
+      invalidate()
+      switch (type) {
+        case 'task-session':
+          rawBlock = await updateBlockSessions(id, data)
+          break
+        case 'task':
+          rawBlock = await updateTaskBlock(data, params.originalTask)
+          break
+        case 'task-date':
+          rawBlock = await updateBlockDateInfo({
+            ...data,
+            uuid: id,
+          })
+          break
+        case 'task-status':
+        case 'objective-status':
+          rawBlock = await updateBlockTaskStatus(task, data)
+          break
+        case 'task-remove-date':
+          rawBlock = await deleteBlockDateInfo(id)
+          break
+        case 'objective':
+          // 如果执行到这个分支，说明 task.objective 一定存在
+          rawBlock = await updateObjectiveBlock({
+            ...task,
+            ...data,
+          } as AgendaObjective)
+          break
+        default:
+          break
+      }
+      const block = await transformBlockToBlockFromQuery(rawBlock)
+      if (!block) {
+        message.error('Failed to edit block')
+        throw new Error('Failed to edit block')
+      }
 
-    const newTask = await transformBlockToAgendaEntity(block, settings)
-    invalidate()
-    const isFilterMode = (settings.selectedFilters || [])?.length > 0
-    if (isFilterMode && (newTask.filters ?? []).length === 0) {
-      const message = type.startsWith('task')
-        ? 'Edit task successful but task is hidden'
-        : 'Edit objective successful but objective is hidden'
-      const description = type.startsWith('task')
-        ? 'Task was hidden because it dose not match any of your filters.'
-        : 'Objective was hidden because it dose not match any of your filters.'
-      notification.info({
-        message,
-        description,
-        duration: 0,
+      const newTask = await transformBlockToAgendaEntity(block, settings)
+      invalidate()
+      const isFilterMode = (settings.selectedFilters || [])?.length > 0
+      if (isFilterMode && (newTask.filters ?? []).length === 0) {
+        const message = type.startsWith('task')
+          ? 'Edit task successful but task is hidden'
+          : 'Edit objective successful but objective is hidden'
+        const description = type.startsWith('task')
+          ? 'Task was hidden because it dose not match any of your filters.'
+          : 'Objective was hidden because it dose not match any of your filters.'
+        notification.info({
+          message,
+          description,
+          duration: 0,
+        })
+        setEntities((_tasks) => _tasks.filter((task) => task.id !== id))
+        return newTask
+      }
+      setEntities((_tasks) => {
+        return _tasks.map((task) => {
+          if (task.id === id) {
+            return { ...task, ...newTask }
+          }
+          return task
+        })
       })
-      setEntities((_tasks) => _tasks.filter((task) => task.id !== id))
       return newTask
-    }
-    setEntities((_tasks) => {
-      return _tasks.map((task) => {
-        if (task.id === id) {
-          return { ...task, ...newTask }
-        }
-        return task
-      })
     })
-    return newTask
-  }
 
   const deleteEntity = (id: string) => {
     deleteEntityBlock(id)

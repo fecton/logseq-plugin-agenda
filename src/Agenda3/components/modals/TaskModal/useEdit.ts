@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { object, string, optional, special, type Output, safeParse, array, number, union, picklist } from 'valibot'
 
 import { genDurationString, parseDurationString } from '@/Agenda3/helpers/block'
+import { getTaskSessions, serializeSessions, validateSessions } from '@/Agenda3/helpers/taskSessions'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { AgendaEntity, AgendaEntityDeadline } from '@/types/entity'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
@@ -14,6 +15,7 @@ import { TASK_SIZES } from '@/types/taskSize'
 import { genStart } from './useCreate'
 
 const DayjsSchema = special<Dayjs>((input) => isDayjs(input) && input.isValid())
+const SessionsSchema = array(object({ id: string(), start: DayjsSchema, end: DayjsSchema }))
 const BaseFormSchema = object({
   title: string(),
   endDateVal: optional(DayjsSchema),
@@ -34,6 +36,7 @@ const BaseFormSchema = object({
   bindObjectiveId: optional(string()),
   size: optional(picklist(TASK_SIZES)),
   priority: optional(picklist(TASK_PRIORITIES)),
+  sessions: optional(SessionsSchema),
 })
 const StartFormSchema = object({
   ...BaseFormSchema.entries,
@@ -45,7 +48,13 @@ const DeadlineFormSchema = object({
   startDateVal: optional(DayjsSchema),
   deadlineDateVal: DayjsSchema,
 })
-const EditFormSchema = union([StartFormSchema, DeadlineFormSchema])
+const SessionFormSchema = object({
+  ...BaseFormSchema.entries,
+  sessions: SessionsSchema,
+  startDateVal: optional(DayjsSchema),
+  deadlineDateVal: optional(DayjsSchema),
+})
+const EditFormSchema = union([StartFormSchema, DeadlineFormSchema, SessionFormSchema])
 type EditTaskForm = Output<typeof EditFormSchema>
 type EditTaskFormNoValidation = Partial<EditTaskForm>
 const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) => {
@@ -66,6 +75,10 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
     bindObjectiveId: initialTask?.bindObjectiveId,
     size: initialTask?.size,
     priority: initialTask?.priority,
+    sessions:
+      initialTask && (getTaskSessions(initialTask).length || initialTask.sessions !== undefined)
+        ? getTaskSessions(initialTask)
+        : undefined,
   }
   const [formData, setFormData] = useState<EditTaskFormNoValidation>(initialFormData)
 
@@ -101,7 +114,7 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
   }
   const edit = async () => {
     // start 与 deadline 不能同时为空
-    if (!start && !deadline) {
+    if (!start && !deadline && formData.sessions === undefined) {
       const message = t('Pleasse specify start or deadline')
       messageApi.error(message)
       throw new Error(message)
@@ -123,6 +136,10 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
       throw new Error(message)
     }
     const estimatedTime = result.output.estimatedTime
+    if (formData.sessions !== undefined) validateSessions(formData.sessions)
+    const sessionsChanged =
+      formData.sessions !== undefined &&
+      serializeSessions(formData.sessions) !== serializeSessions(getTaskSessions(initialTask))
     return updateEntity({
       type: 'task',
       id: initialTask.id,
@@ -130,6 +147,7 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
       data: {
         ...initialTask,
         ...result.output,
+        sessions: sessionsChanged ? formData.sessions : initialTask.sessions,
         allDay,
         // start 与 deadline 不能同时为空
         start,

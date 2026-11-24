@@ -24,6 +24,37 @@ beforeEach(() => {
   updateEntity.mockResolvedValue(initial)
 })
 
+test('session edits preserve estimate, support cancel/retry and removing the last schedule', async () => {
+  const first = { id: 'one', start: dayjs('2026-11-24T13:00'), end: dayjs('2026-11-24T14:00') }
+  const task = { ...initial, allDay: false, start: first.start, sessions: [first], estimatedTime: 90 }
+  const { result } = renderHook(() => useEdit(task, messages))
+  act(() =>
+    result.current.updateFormData({
+      sessions: [...task.sessions, { id: 'two', start: dayjs('2026-11-24T15:00'), end: dayjs('2026-11-24T16:00') }],
+    }),
+  )
+  expect(updateEntity).not.toHaveBeenCalled()
+  act(() => result.current.reset())
+  expect(result.current.formData.sessions).toEqual([first])
+  act(() => result.current.updateFormData({ sessions: [] }))
+  updateEntity.mockRejectedValueOnce(new Error('offline'))
+  await expect(result.current.edit()).rejects.toThrow('offline')
+  expect(result.current.formData.sessions).toEqual([])
+  await result.current.edit()
+  expect(updateEntity.mock.calls[1][0].data).toMatchObject({ sessions: [], estimatedTime: 90 })
+  expect(task.sessions).toEqual([first])
+})
+
+test('session form rejects overlaps before saving', async () => {
+  const first = { id: 'one', start: dayjs('2026-11-24T13:00'), end: dayjs('2026-11-24T14:00') }
+  const { result } = renderHook(() =>
+    useEdit({ ...initial, start: first.start, allDay: false, sessions: [first] }, messages),
+  )
+  act(() => result.current.updateFormData({ sessions: [first, { ...first, id: 'two' }] }))
+  await expect(result.current.edit()).rejects.toThrow('overlap')
+  expect(updateEntity).not.toHaveBeenCalled()
+})
+
 test('an unscheduled task starts without invented dates/times and must get a date before saving', async () => {
   const { result } = renderHook(() => useEdit(initial, messages))
   expect(result.current.formData.startTime).toBeUndefined()

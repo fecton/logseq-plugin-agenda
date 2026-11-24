@@ -48,6 +48,16 @@ If you want to contribute, please visit [contribution guide](./CONTRIBUTING.md)
 ![Timeline](./screenshots/timeline.png)
 ![Pomodoro](./screenshots/pomodoro.png) -->
 
+## Planned sessions
+
+One task can have several timed sessions. Dragging its Kanban card into Time Box or Calendar **adds a session**; dragging or resizing an existing box changes **only that session**. The task editor's **Sessions** section lets you add, change, or remove individual sessions. Removing a session does not delete the task.
+
+Kanban shows one card on each session-start day, with a session count and that day's planned duration. Moving a card between days moves sessions starting on its source day together. Priority, Size, task completion, and notes remain shared. Each session has its own end notification; completing the task stops all its notifications.
+
+Sessions are plans, not automatic work logs. Record work under **Actual Time → Add a log**. **Show Time Log** displays actual work, including unfinished tasks, in gray alongside planned sessions. The task estimate stays separate from total planned time.
+
+Existing timed tasks remain compatible and are not bulk migrated. Session edits store a JSON `sessions` list in the `:AGENDA:` drawer and mirror the earliest session into `SCHEDULED`; manage these tasks' schedules through Sessions. The final session can be removed without losing the task or its deadline. Same-task overlaps are rejected; overnight and adjacent sessions are supported. Recurring and multi-day all-day tasks retain their existing behavior.
+
 ## Task priorities
 
 In Agenda 3, create or edit a task and choose **Priority** beside Size: **Blocker, Highest, High, Medium, Low, or Lowest**. Blocker ranks above Highest and has a red blocked-circle icon; the other levels use colored arrows or an equals icon. New tasks created in Agenda default to Medium; existing tasks remain unset, and the field can be cleared. Kanban and Time Box always show a priority indicator. Assigned priorities also appear in Calendar, Backlog, and Needs review.

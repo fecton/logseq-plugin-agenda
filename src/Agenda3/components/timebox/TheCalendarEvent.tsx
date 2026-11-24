@@ -1,11 +1,11 @@
 import type { EventContentArg } from '@fullcalendar/core'
-import { Dropdown } from 'antd'
+import { Dropdown, message } from 'antd'
 import dayjs from 'dayjs'
 import { IoIosCheckmarkCircle } from 'react-icons/io'
 import { RiDeleteBin4Line, RiInboxUnarchiveLine } from 'react-icons/ri'
 
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
-import type { AgendaEntity } from '@/types/entity'
+import type { CalendarEvent } from '@/types/fullcalendar'
 import { cn } from '@/util/util'
 
 import TaskPriorityBadge from '../TaskPriorityBadge'
@@ -17,22 +17,18 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
   const onDeleteTask = async (taskId: string) => {
     deleteEntity(taskId)
   }
-  const onRemoveTime = async (info: EventContentArg) => {
-    updateEntity({
-      type: 'task-date',
-      id: info.event.id,
-      data: {
-        allDay: true,
-        start: info.event.extendedProps.start,
-        estimatedTime: info.event.extendedProps.estimatedTime,
-      },
-    })
+  const onRemoveTime = async () => {
+    try {
+      await updateEntity({ type: 'task-session', id: savedTask.id, data: { type: 'remove', id: savedTask.sessionId! } })
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Could not remove session.')
+    }
   }
-  const savedTask = info.event.extendedProps as AgendaEntity
+  const savedTask = info.event.extendedProps as CalendarEvent['extendedProps']
   // External drops render before the scheduled task is saved and reloaded.
   // Use the loaded entity for badges, but wait for full event data before editing.
   const taskData = savedTask.rawBlock ? savedTask : entities?.find((task) => task.id === info.event.id)
-  const showTitle = taskData?.showTitle ?? info.event.title
+  const showTitle = `${savedTask.eventKind === 'time-log' ? 'Actual · ' : ''}${taskData?.showTitle ?? info.event.title}`
   const isShowTimeText = info.event.allDay === false && dayjs(info.event.end).diff(info.event.start, 'minute') > 20
   const isSmallHeight = info.event.allDay === false && dayjs(info.event.end).diff(info.event.start, 'minute') <= 10
   const isDone = taskData?.status === 'done'
@@ -60,17 +56,20 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
       info={{
         type: 'edit',
         initialTaskData: savedTask,
+        sessionId: savedTask.sessionId,
       }}
     >
       <Dropdown
         trigger={['contextMenu']}
         menu={{
           items: [
-            {
-              key: 'remove',
-              label: 'Remove from timebox',
-              icon: <RiInboxUnarchiveLine className="!text-base" />,
-            },
+            savedTask.eventKind === 'session'
+              ? {
+                  key: 'remove',
+                  label: 'Remove session',
+                  icon: <RiInboxUnarchiveLine className="!text-base" />,
+                }
+              : null,
             {
               key: 'delete',
               label: 'Delete task',
@@ -79,8 +78,8 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
             },
           ],
           onClick: ({ key }) => {
-            if (key === 'delete') onDeleteTask(info.event.id)
-            if (key === 'remove') onRemoveTime(info)
+            if (key === 'delete') onDeleteTask(savedTask.id)
+            if (key === 'remove') void onRemoveTime()
           },
         }}
       >

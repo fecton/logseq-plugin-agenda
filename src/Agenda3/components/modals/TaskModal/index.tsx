@@ -9,6 +9,7 @@ import { CgSandClock } from 'react-icons/cg'
 import { IoIosCheckmarkCircleOutline, IoMdCloseCircle } from 'react-icons/io'
 import { RiCheckboxBlankCircleLine, RiDeleteBin4Line } from 'react-icons/ri'
 
+import { parseDurationString } from '@/Agenda3/helpers/block'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
 import { track } from '@/Agenda3/helpers/umami'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
@@ -28,6 +29,7 @@ import TaskPrioritySelect from '../../forms/TaskPrioritySelect'
 import TaskSizeSelect from '../../forms/TaskSizeSelect'
 import LogseqLogo from '../../icons/LogseqLogo'
 import PageIcon from '../../icons/PageIcon'
+import Sessions from './Sessions'
 import TimeLogComponent from './TimeLog'
 import useCreate, { type CreateTaskForm } from './useCreate'
 import useEdit from './useEdit'
@@ -55,6 +57,7 @@ const TaskModal = ({
     | {
         type: 'edit'
         initialTaskData: AgendaEntity
+        sessionId?: string
       }
 }) => {
   const { t } = useTranslation()
@@ -86,6 +89,9 @@ const TaskModal = ({
     deadline,
   } = info.type === 'create' ? createHookResult : editHookResult
   const { create } = createHookResult
+  useEffect(() => {
+    if (_open) resetFormData()
+  }, [_open])
   const { edit } = editHookResult
   const action = info.type === 'edit' ? edit : create
   // can't edit recurring task
@@ -113,7 +119,7 @@ const TaskModal = ({
       onOk?.()
       setInternalOpen(false)
     } catch (error) {
-      messageApi.error(t('Could not save task. Please try again.'))
+      messageApi.error(error instanceof Error ? error.message : t('Could not save task. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -269,7 +275,7 @@ const TaskModal = ({
                     disabled={saving}
                     icon={<RiDeleteBin4Line />}
                   >
-                    {t('Delete')}
+                    {t('Delete task')}
                   </Button>
                 </Popconfirm>
               ) : null}
@@ -314,7 +320,7 @@ const TaskModal = ({
           onSearch={(text) => setTitleTagSearchText(text)}
         />
         {/* ========== Start Date Start ========= */}
-        {formData.endDateVal ? (
+        {formData.sessions !== undefined ? null : formData.endDateVal ? (
           <div className="my-2 flex">
             <div className="flex w-[160px] items-center gap-1 text-gray-400">
               <BsCalendar4Range /> {t('Date Range')}
@@ -389,6 +395,35 @@ const TaskModal = ({
           </div>
         )}
         {/* ========= Start Date End ========= */}
+        {info.type === 'edit' && info.initialTaskData.sessionsError ? (
+          <p role="alert" className="text-red-600 dark:text-red-400">
+            {info.initialTaskData.sessionsError}
+          </p>
+        ) : null}
+        {!formData.endDateVal && !editDisabled ? (
+          <Sessions
+            value={
+              formData.sessions ??
+              (start && !allDay
+                ? [
+                    {
+                      id: 'scheduled',
+                      start,
+                      end: start.add(
+                        formData.estimatedTime ? parseDurationString(formData.estimatedTime) : 30,
+                        'minute',
+                      ),
+                    },
+                  ]
+                : [])
+            }
+            duration={formData.estimatedTime ? parseDurationString(formData.estimatedTime) : 30}
+            disabled={saving || (info.type === 'edit' && Boolean(info.initialTaskData.sessionsError))}
+            selectedId={info.type === 'edit' ? info.sessionId : undefined}
+            open={Boolean(_open)}
+            onChange={(sessions) => updateFormData({ sessions })}
+          />
+        ) : null}
 
         {/* ========= Estimated Time Start ========= */}
         <div className="my-2 flex">

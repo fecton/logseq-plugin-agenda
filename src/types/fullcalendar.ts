@@ -1,6 +1,6 @@
 import type { FREQ_ENUM_MAP } from '@/Agenda3/helpers/task'
 
-import type { AgendaTaskWithStartOrDeadline } from './task'
+import type { AgendaEntity } from './entity'
 
 /** https://github.com/jkbrzt/rrule */
 export type RRule = {
@@ -15,7 +15,7 @@ export type CalendarEvent = {
   title: string
   start: Date
   end: Date
-  extendedProps: AgendaTaskWithStartOrDeadline
+  extendedProps: AgendaEntity & { eventKind?: 'session' | 'time-log'; sessionId?: string }
   allDay: boolean
   rrule?: RRule
   editable?: boolean

@@ -1,6 +1,7 @@
 import { type Dayjs } from 'dayjs'
 
 import { type BlockFromQuery } from '@/Agenda3/helpers/task'
+import type { PlannedSession } from '@/Agenda3/helpers/taskSessions'
 import { type Filter } from '@/Agenda3/models/settings'
 
 import type { RRule } from './fullcalendar'
@@ -17,6 +18,11 @@ export type AgendaEntity = {
   status: 'todo' | 'done'
   allDay: boolean
   start?: Dayjs // logseq scheduled
+  sessions?: PlannedSession[]
+  sessionsError?: string
+  sessionDay?: string // Kanban projection only; never persisted
+  dayPlannedMinutes?: number
+  daySessionCount?: number
   end?: Dayjs // from agenda drawer end
   // logseq deadline
   deadline?: AgendaEntityDeadline

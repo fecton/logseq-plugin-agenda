@@ -8,6 +8,7 @@ import { IoRepeatOutline } from 'react-icons/io5'
 
 import { minutesToHHmm } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
+import { getTaskSessions, loggedMinutesOnDay } from '@/Agenda3/helpers/taskSessions'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
 import { logseqAtom } from '@/Agenda3/models/logseq'
 import { DEFAULT_ESTIMATED_TIME } from '@/constants/agenda'
@@ -28,7 +29,10 @@ const Toolbar = ({
   onClickMark: (event: React.MouseEvent, task: AgendaEntity, status: AgendaEntity['status']) => void
 }) => {
   const { currentGraph } = useAtomValue(logseqAtom)
-  const estimatedTime = task.estimatedTime ?? DEFAULT_ESTIMATED_TIME
+  const estimatedTime = task.dayPlannedMinutes ?? task.estimatedTime ?? DEFAULT_ESTIMATED_TIME
+  const displayedStart = task.sessionDay
+    ? getTaskSessions(task).find((session) => session.start.format('YYYY-MM-DD') === task.sessionDay)?.start
+    : task.start
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-1">
@@ -53,7 +57,7 @@ const Toolbar = ({
               backgroundColor: groupType === 'page' ? task.project.bgColor : task?.filters?.[0]?.color,
             }}
           >
-            {task.start.format('HH:mm')}
+            {displayedStart?.format('HH:mm')}
           </span>
         )}
         {/* Recurring icon */}
@@ -83,6 +87,11 @@ const Toolbar = ({
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1">
+        {task.daySessionCount ? (
+          <span className="text-[10px] text-gray-500 dark:text-gray-300">
+            {task.daySessionCount} {task.daySessionCount === 1 ? 'session' : 'sessions'}
+          </span>
+        ) : null}
         <TaskPriorityBadge priority={task.priority} showEmpty />
         <TaskSizeBadge
           size={task.size}
@@ -91,7 +100,14 @@ const Toolbar = ({
         />
         {task.start ? (
           <div className="rounded bg-gray-100 px-1 py-0.5 text-[10px] text-gray-400 dark:bg-zinc-800">
-            {task.status === 'done' ? <span>{minutesToHHmm(task.actualTime ?? estimatedTime)} / </span> : null}
+            {task.status === 'done' ? (
+              <span>
+                {minutesToHHmm(
+                  task.sessionDay ? loggedMinutesOnDay(task, task.sessionDay) : task.actualTime ?? estimatedTime,
+                )}{' '}
+                /{' '}
+              </span>
+            ) : null}
             {minutesToHHmm(estimatedTime)}
           </div>
         ) : null}

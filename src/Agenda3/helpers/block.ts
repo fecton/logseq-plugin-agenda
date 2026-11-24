@@ -21,6 +21,16 @@ import { updateBlock } from '@/util/logseq'
 
 import { secondsToHHmmss } from './fullCalendar'
 import type { BlockFromQuery } from './task'
+import {
+  applySessionOperation,
+  getTaskSessions,
+  mergeSessionEdits,
+  parseSessions,
+  serializeSessions,
+  validateSessions,
+  type PlannedSession,
+  type SessionOperation,
+} from './taskSessions'
 
 /**
  * insert `<SCHEDULED: ...>` string into a block without any `<SCHEDULED: ...>` string
@@ -48,6 +58,9 @@ export const updateBlockDateInfo = async (dateInfo: {
   const { uuid, allDay, start } = dateInfo
   const originalBlock = await logseq.Editor.getBlock(uuid)
   if (!originalBlock) return Promise.reject(new Error('Block not found'))
+  const existingDrawer = parseAgendaDrawer(originalBlock.content)
+  if (existingDrawer?.sessionsError) throw new Error(existingDrawer.sessionsError)
+  if (existingDrawer?.sessions !== undefined) throw new Error('Use Sessions to change this task’s schedule.')
 
   const scheduledText = `SCHEDULED: <${start.format(allDay ? SCHEDULED_DATE_FORMATTER : SCHEDULED_DATETIME_FORMATTER)}>`
   // update SCHEDULED
@@ -78,6 +91,42 @@ export const updateBlockDateInfo = async (dateInfo: {
 /**
  * delete date info
  */
+function readBlockSessionTask(block: BlockEntity): AgendaEntity {
+  const drawer = parseAgendaDrawer(block.content)
+  const scheduled = /^SCHEDULED: <(\d{4}-\d{2}-\d{2})\s+\w+(?:\s+(\d{2}:\d{2}))?/m.exec(block.content)
+  return {
+    id: block.uuid,
+    rawBlock: {
+      ...block,
+      repeated: Boolean(block.repeated || block['repeated?'] || /^SCHEDULED:.*[.+]*\+\d+[hdwmy]/m.test(block.content)),
+    },
+    allDay: !scheduled?.[2],
+    start: scheduled ? dayjs(`${scheduled[1]}T${scheduled[2] ?? '00:00'}`) : undefined,
+    end: drawer?.end,
+    estimatedTime: drawer?.estimated,
+    sessions: drawer?.sessions,
+    sessionsError: drawer?.sessionsError,
+    objective: drawer?.objective,
+  } as AgendaEntity
+}
+
+function writeSessionsContent(content: string, sessions: PlannedSession[]) {
+  const sorted = validateSessions(sessions)
+  return updateBlockAgendaDrawer(updateBlockScheduled(content, { start: sorted[0]?.start, allDay: false }), {
+    sessions: sorted,
+    end: undefined,
+  })
+}
+
+export async function updateBlockSessions(uuid: string, operation: SessionOperation) {
+  const block = await logseq.Editor.getBlock(uuid)
+  if (!block) throw new Error('Block not found')
+  const task = readBlockSessionTask(block)
+  const sessions = applySessionOperation(task, operation)
+  await logseq.Editor.updateBlock(uuid, writeSessionsContent(block.content, sessions))
+  return logseq.Editor.getBlock(uuid)
+}
+
 export const deleteBlockDateInfo = async (uuid: string) => {
   const originalBlock = await logseq.Editor.getBlock(uuid)
   if (!originalBlock) return Promise.reject(new Error('Block not found'))
@@ -92,7 +141,12 @@ export const deleteBlockDateInfo = async (uuid: string) => {
         .filter(Boolean)
         .join('\n')
     : originalBlock.content
-  await logseq.Editor.updateBlock(uuid, newContent)
+  const drawer = parseAgendaDrawer(originalBlock.content)
+  if (drawer?.sessionsError) throw new Error(drawer.sessionsError)
+  await logseq.Editor.updateBlock(
+    uuid,
+    drawer?.sessions !== undefined ? writeSessionsContent(newContent, []) : newContent,
+  )
   return logseq.Editor.getBlock(uuid)
 }
 
@@ -188,6 +242,10 @@ export const deleteBlogTimeLog = async (uuid: string, index: number) => {
  * create task
  */
 export const createTaskBlock = async (taskInfo: CreateAgendaTask) => {
+  if (taskInfo.sessions !== undefined) {
+    const sessions = validateSessions(taskInfo.sessions)
+    taskInfo = { ...taskInfo, sessions, start: sessions[0]?.start, allDay: false, end: undefined }
+  }
   const { title, allDay, start, deadline, end, estimatedTime, projectId, bindObjectiveId, size, priority } = taskInfo
 
   const AGENDA_DRAWER = genAgendaDrawerText({
@@ -196,6 +254,7 @@ export const createTaskBlock = async (taskInfo: CreateAgendaTask) => {
     bindObjectiveId,
     size,
     priority,
+    sessions: taskInfo.sessions,
   })
   // const
   const content = [
@@ -235,10 +294,7 @@ export function generateTimeLogText({ start, end }: { start: Dayjs; end: Dayjs }
 /**
  * update task
  */
-export const updateTaskBlock = async (
-  taskInfo: AgendaTaskWithStartOrDeadline & { projectId?: string },
-  originalTask?: AgendaEntity,
-) => {
+export const updateTaskBlock = async (taskInfo: AgendaEntity & { projectId?: string }, originalTask?: AgendaEntity) => {
   const {
     id,
     title,
@@ -275,6 +331,16 @@ export const updateTaskBlock = async (
   if ('size' in taskInfo && changed(size, originalTask?.size)) drawer.size = size
   if ('priority' in taskInfo && changed(priority, originalTask?.priority)) drawer.priority = priority
   content = updateBlockAgendaDrawer(content, drawer)
+  if (taskInfo.sessions !== undefined) {
+    const latest = readBlockSessionTask(originalBlock)
+    if (latest.sessionsError) throw new Error(latest.sessionsError)
+    const sessions = mergeSessionEdits(
+      getTaskSessions(latest),
+      originalTask ? getTaskSessions(originalTask) : getTaskSessions(latest),
+      taskInfo.sessions,
+    )
+    content = writeSessionsContent(content, sessions)
+  }
   if (changed(timeLogs ?? [], originalTask?.timeLogs ?? [])) content = updateBlockTimeLogText(content, timeLogs)
   await updateBlock(id, content)
 
@@ -373,6 +439,8 @@ export function genDurationString(minutes: number): string {
 }
 
 type AgendaDrawer = {
+  sessions?: PlannedSession[]
+  sessionsError?: string
   estimated?: number
   end?: Dayjs
   objective?: AgendaEntityObjective
@@ -395,10 +463,21 @@ export function parseAgendaDrawer(blockContent: string): AgendaDrawer | null {
     .split('\n')
     .filter(Boolean)
     .map((line) => {
-      return line.split(':').map((v) => v.trim())
+      const separator = line.indexOf(':')
+      return [line.slice(0, separator).trim(), line.slice(separator + 1).trim()]
     })
   return properties.length > 0
     ? properties.reduce((acc, cur) => {
+        if (cur[0] === 'sessions') {
+          try {
+            return { ...acc, sessions: parseSessions(cur[1]) }
+          } catch {
+            return {
+              ...acc,
+              sessionsError: 'Invalid sessions data. Repair the sessions field in Logseq before changing the schedule.',
+            }
+          }
+        }
         if (cur[0] === 'estimated') return { ...acc, estimated: parseDurationString(cur[1]) }
         if (cur[0] === 'end') return { ...acc, end: dayjs(cur[1], DATE_FORMATTER) }
         if (cur[0] === 'objective') {
@@ -446,6 +525,8 @@ export function genAgendaDrawerText(drawer: AgendaDrawer): string {
       } else if (key === 'priority') {
         valueText = parseTaskPriority(originalVal) ?? ''
         if (!valueText) return null
+      } else if (key === 'sessions') {
+        valueText = serializeSessions(originalVal)
       }
       return `${key}: ${valueText}`
     })

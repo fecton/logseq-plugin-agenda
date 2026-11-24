@@ -35,3 +35,13 @@ test('can clear the default priority and resets new tasks to Medium', async () =
   act(() => result.current.reset())
   expect(result.current.formData.priority).toBe('medium')
 })
+
+test('creates sessions even when the separate start date is cleared', async () => {
+  const messages = { error: vi.fn() } as unknown as MessageInstance
+  const { result } = renderHook(() => useCreate({ title: 'Sessions task' }, messages))
+  const sessions = [{ id: 'one', start: dayjs('2026-11-24T13:00'), end: dayjs('2026-11-24T14:00') }]
+  act(() => result.current.updateFormData({ startDateVal: undefined, sessions }))
+  await result.current.create()
+  expect(messages.error).not.toHaveBeenCalled()
+  expect(addNewEntity.mock.lastCall?.[0].data.sessions).toEqual(sessions)
+})
