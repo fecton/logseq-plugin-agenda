@@ -62,7 +62,7 @@ test('renders priority order, reorders refreshed tasks, and retains cross-day sc
   expect(update).toMatchObject({ id: 'medium', type: 'task-date', data: { allDay: false } })
   expect(update.data.start.format('YYYY-MM-DD HH:mm')).toBe('2026-11-25 13:00')
   expect(tasks[3]).toMatchObject({ priority: 'medium', size: 'XL' })
-  const refreshed = tasks.map((t) => (t.id === 'low' ? { ...t, priority: 'highest' as const } : t))
+  const refreshed = tasks.map((t) => (t.id === 'low' ? { ...t, priority: 'blocker' as const } : t))
   rerender(<Column day={day} tasks={refreshed} allKanbanItems={refreshed} />)
   expect(screen.getAllByRole('article').map((el) => el.textContent)).toEqual(['low', 'high', 'unset', 'medium', 'done'])
 })

@@ -19,7 +19,7 @@ function Form() {
   )
 }
 
-test('offers five labeled icons and supports choosing and clearing priority', async () => {
+test('offers six labeled icons and supports choosing and clearing priority', async () => {
   render(<Form />)
   expect(screen.getByLabelText('Selected priority')).toHaveTextContent('medium')
   for (const priority of TASK_PRIORITIES) {

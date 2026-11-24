@@ -99,7 +99,9 @@ test.each(['A', 'B', 'C'])(
     expect(block.content).toContain('priority: highest')
     await updateTaskBlock({ ...high, priority: 'low' }, high)
     expect(block.content).toBe(highContent.replace('priority: high', 'priority: low'))
-    await updateTaskBlock({ ...high, priority: undefined }, { ...high, priority: 'low' })
+    await updateTaskBlock({ ...high, priority: 'blocker' }, { ...high, priority: 'low' })
+    expect(block.content).toBe(highContent.replace('priority: high', 'priority: blocker'))
+    await updateTaskBlock({ ...high, priority: undefined }, { ...high, priority: 'blocker' })
     expect(block.content).toBe(content)
   },
 )
@@ -115,9 +117,12 @@ test('sorts unfinished first and ranks unset with Medium, preserving ties and th
     { id: 'high', status: 'todo', priority: 'high' },
     { id: 'lowest', status: 'todo', priority: 'lowest' },
     { id: 'done-low', status: 'done', priority: 'low' },
+    { id: 'blocker', status: 'todo', priority: 'blocker' },
+    { id: 'done-blocker', status: 'done', priority: 'blocker' },
   ] as AgendaTaskWithStart[]
   const original = [...tasks]
   expect(sortKanbanTasks(tasks).map((task) => task.id)).toEqual([
+    'blocker',
     'highest',
     'high',
     'unset-1',
@@ -125,6 +130,7 @@ test('sorts unfinished first and ranks unset with Medium, preserving ties and th
     'unset-2',
     'low',
     'lowest',
+    'done-blocker',
     'done-highest',
     'done-low',
   ])

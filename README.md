@@ -50,7 +50,7 @@ If you want to contribute, please visit [contribution guide](./CONTRIBUTING.md)
 
 ## Task priorities
 
-In Agenda 3, create or edit a task and choose **Priority** beside Size: **Highest, High, Medium, Low, or Lowest**. Each level has a colored arrow or equals icon. New tasks created in Agenda default to Medium; existing tasks remain unset, and the field can be cleared. Kanban and Time Box always show a priority indicator. Assigned priorities also appear in Calendar, Backlog, and Needs review.
+In Agenda 3, create or edit a task and choose **Priority** beside Size: **Blocker, Highest, High, Medium, Low, or Lowest**. Blocker ranks above Highest and has a red blocked-circle icon; the other levels use colored arrows or an equals icon. New tasks created in Agenda default to Medium; existing tasks remain unset, and the field can be cleared. Kanban and Time Box always show a priority indicator. Assigned priorities also appear in Calendar, Backlog, and Needs review.
 
 Kanban automatically sorts each day with unfinished tasks first and completed tasks last, then by priority within each group. Unset tasks share Medium's rank, and equal-priority tasks keep their existing order. Dragging still moves tasks between dates or into Time Box, but cannot override priority order within a day. Time Box and Calendar keep scheduled-time positioning.
 

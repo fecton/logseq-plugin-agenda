@@ -1,10 +1,11 @@
-import { ChevronDown, ChevronUp, ChevronsDown, ChevronsUp, Equal, Minus } from 'lucide-react'
+import { Ban, ChevronDown, ChevronUp, ChevronsDown, ChevronsUp, Equal, Minus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 import { parseTaskPriority, TASK_PRIORITY_LABELS, type TaskPriority } from '@/types/taskPriority'
 import { cn } from '@/util/util'
 
 const PRIORITY_ICONS = {
+  blocker: { icon: Ban, color: 'text-red-700 dark:text-red-400' },
   highest: { icon: ChevronsUp, color: 'text-red-700 dark:text-red-400' },
   high: { icon: ChevronUp, color: 'text-red-600 dark:text-red-400' },
   medium: { icon: Equal, color: 'text-amber-700 dark:text-amber-400' },
