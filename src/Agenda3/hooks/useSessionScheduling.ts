@@ -5,10 +5,20 @@ import dayjs from 'dayjs'
 import { getTaskSessions } from '../helpers/taskSessions'
 import useAgendaEntities from './useAgendaEntities'
 
+const leavingEvents = new Map<string, () => void>()
+export function captureSessionLeave(info: { event: EventApi; revert: () => void }) {
+  leavingEvents.set(info.event.id, info.revert)
+}
+
 export default function useSessionScheduling() {
   const { updateEntity, entities } = useAgendaEntities()
   return async (info: { event: EventApi; revert: () => void }, receive = false) => {
     const { event } = info
+    if (receive) {
+      // The two calendars share tasks. Keep the source event until the saved state replaces it.
+      leavingEvents.get(event.id)?.()
+      leavingEvents.delete(event.id)
+    }
     const taskId = event.extendedProps.id ?? event.id
     const task = entities.find((entity) => entity.id === taskId)
     try {
@@ -30,12 +40,18 @@ export default function useSessionScheduling() {
           data: { type: 'add', id: crypto.randomUUID(), start: sessionStart },
         })
       } else if (event.extendedProps.eventKind === 'session') {
-        if (event.allDay || !event.end)
-          throw new Error('Sessions need a start time and duration. Edit the session to change its date.')
+        const previous = getTaskSessions(task).find((session) => session.id === event.extendedProps.sessionId)
+        if (!previous) throw new Error('This session no longer exists. Refresh Agenda and try again.')
+        // A month cell supplies only a date; keep the selected session's time and duration.
+        const sessionStart = event.allDay ? start.hour(previous.start.hour()).minute(previous.start.minute()) : start
+        const sessionEnd =
+          event.allDay || !event.end
+            ? sessionStart.add(previous.end.diff(previous.start, 'minute'), 'minute')
+            : dayjs(event.end)
         await updateEntity({
           type: 'task-session',
           id: taskId,
-          data: { type: 'update', id: event.extendedProps.sessionId, start, end: dayjs(event.end) },
+          data: { type: 'update', id: event.extendedProps.sessionId, start: sessionStart, end: sessionEnd },
         })
       } else {
         if (event.extendedProps.eventKind === 'time-log') throw new Error('Edit actual work in the task editor.')

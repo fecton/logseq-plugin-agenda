@@ -14,7 +14,7 @@ import { genDurationString } from '@/Agenda3/helpers/block'
 import { transformAgendaTaskToCalendarEvent } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
 import { track } from '@/Agenda3/helpers/umami'
-import useSessionScheduling from '@/Agenda3/hooks/useSessionScheduling'
+import useSessionScheduling, { captureSessionLeave } from '@/Agenda3/hooks/useSessionScheduling'
 import { appAtom } from '@/Agenda3/models/app'
 import { calendarTasksAtom } from '@/Agenda3/models/entities/tasks'
 import { logseqAtom } from '@/Agenda3/models/logseq'
@@ -157,6 +157,7 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
     >
       <FullCalendar
         slotEventOverlap={false}
+        eventLeave={captureSessionLeave}
         droppable
         editable
         selectable

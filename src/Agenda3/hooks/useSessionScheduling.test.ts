@@ -5,7 +5,7 @@ import { beforeEach, expect, test, vi } from 'vitest'
 
 import type { AgendaEntity } from '@/types/entity'
 
-import useSessionScheduling from './useSessionScheduling'
+import useSessionScheduling, { captureSessionLeave } from './useSessionScheduling'
 
 const { update, state, error } = vi.hoisted(() => ({
   update: vi.fn(),
@@ -88,4 +88,24 @@ test('waits for the save and reverts rejected received/moved sessions', async ()
   await result.current(moved)
   expect(moved.revert).toHaveBeenCalledOnce()
   expect(error).toHaveBeenLastCalledWith('overlap')
+})
+
+test('calendar-to-calendar moves preserve clock time on month drops and restore the source while saving', async () => {
+  const { result } = renderHook(() => useSessionScheduling())
+  const info = drop(true)
+  Object.assign(info.event, { allDay: true, start: new Date('2026-11-25T00:00'), end: new Date('2026-11-26T00:00') })
+  const sourceRevert = vi.fn()
+  captureSessionLeave({ event: info.event, revert: sourceRevert })
+  await result.current(info, true)
+  expect(sourceRevert).toHaveBeenCalledOnce()
+  expect(update.mock.lastCall?.[0].data.start.format('DD HH:mm')).toBe('25 13:00')
+  expect(update.mock.lastCall?.[0].data.end.format('DD HH:mm')).toBe('25 14:00')
+  captureSessionLeave({ event: info.event, revert: sourceRevert })
+  update.mockRejectedValueOnce(new Error('offline'))
+  await result.current(info, true)
+  expect(sourceRevert).toHaveBeenCalledTimes(2)
+  expect(info.revert).toHaveBeenCalledOnce()
+  Object.assign(info.event, { allDay: false, start: new Date('2026-11-24T18:15'), end: null })
+  await result.current(info, true)
+  expect(update.mock.lastCall?.[0].data.end.format('DD HH:mm')).toBe('24 19:15')
 })

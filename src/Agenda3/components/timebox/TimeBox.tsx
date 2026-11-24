@@ -15,7 +15,7 @@ import { useTheme } from '@/Agenda3/components/ThemeProvider'
 import { genDurationString } from '@/Agenda3/helpers/block'
 import { transformAgendaTaskToCalendarEvent } from '@/Agenda3/helpers/fullCalendar'
 import { track } from '@/Agenda3/helpers/umami'
-import useSessionScheduling from '@/Agenda3/hooks/useSessionScheduling'
+import useSessionScheduling, { captureSessionLeave } from '@/Agenda3/hooks/useSessionScheduling'
 import { calendarTasksAtom } from '@/Agenda3/models/entities/tasks'
 import { settingsAtom } from '@/Agenda3/models/settings'
 import { cn } from '@/util/util'
@@ -114,6 +114,7 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
       </div>
       <FullCalendar
         slotEventOverlap={false}
+        eventLeave={captureSessionLeave}
         droppable
         editable
         selectable
