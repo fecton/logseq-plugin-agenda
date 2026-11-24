@@ -15,6 +15,7 @@ import { genDays } from '@/util/util'
 import { parseAgendaDrawer } from './block'
 import { transformPageToProject } from './project'
 import { getTaskSessions } from './taskSessions'
+import { getTaskTimeTotals } from './taskTime'
 
 export const FREQ_ENUM_MAP = {
   hourly: RRuleClass.HOURLY,
@@ -123,7 +124,8 @@ export const getAgendaEntities = async (settings: Settings, options: { scheduled
     const recurringPastTasks: AgendaEntity[] =
       task.doneHistory?.map((pastTaskEnd) => {
         const { estimatedTime = DEFAULT_ESTIMATED_TIME } = task
-        const spanTime = task.status === 'done' && task.actualTime ? task.actualTime : estimatedTime
+        const manualMinutes = getTaskTimeTotals(task).manualLogMinutes
+        const spanTime = task.status === 'done' && manualMinutes ? manualMinutes : estimatedTime
         return {
           ...task,
           id: task.id + '_' + pastTaskEnd.format('YYYYMMDDHHmm'),
@@ -132,7 +134,7 @@ export const getAgendaEntities = async (settings: Settings, options: { scheduled
           rrule: undefined,
           repeated: false,
           status: 'done',
-          actualTime: task.estimatedTime,
+          actualTime: 0,
         }
       }) ?? []
     return [task].concat(recurringPastTasks)
@@ -202,7 +204,6 @@ export const transformBlockToAgendaEntity = async (
   const agendaDrawer = parseAgendaDrawer(block.content)
   // estimatedTime
   const estimatedTime = agendaDrawer && agendaDrawer.estimated ? agendaDrawer.estimated : undefined
-  const _defaultEstimatedTime = DEFAULT_ESTIMATED_TIME
   // end
   const end = agendaDrawer?.end
   // objective
@@ -227,11 +228,6 @@ export const transformBlockToAgendaEntity = async (
       return { start, end, amount: end.diff(start, 'minute') }
     })
     .filter(Boolean)
-  // 已完成任务，如果没有设置 timeLogs 则默认使用 estimatedTime
-  // if (start && status === 'done' && timeLogs?.length <= 0) {
-  //   const finalEstimatedTime = estimatedTime ?? _defaultEstimatedTime
-  //   timeLogs = [{ start, end: start.add(finalEstimatedTime, 'minute'), amount: finalEstimatedTime }]
-  // }
 
   /**
    * parse done history
@@ -245,9 +241,6 @@ export const transformBlockToAgendaEntity = async (
       const datetimeString = item.replace(/[a-zA-Z\s\[\]*"]/g, '')
       return dayjs(datetimeString, 'YYYY-MM-DDHH:mm')
     })
-
-  // actual time
-  const actualTime = timeLogs?.length > 0 ? timeLogs.reduce((acc, timeLog) => acc + timeLog.amount, 0) : undefined
 
   // recurring info from scheduled
   let rrule: RRule | undefined
@@ -272,7 +265,7 @@ export const transformBlockToAgendaEntity = async (
     _filters = belongFilters
   }
 
-  return {
+  const task: AgendaEntity = {
     id: uuid,
     status,
     title,
@@ -282,7 +275,6 @@ export const transformBlockToAgendaEntity = async (
     allDay: agendaDrawer?.sessions !== undefined ? false : allDay,
     deadline,
     estimatedTime,
-    actualTime,
     project: transformPageToProject(page, _favoritePages),
     filters: _filters,
     timeLogs,
@@ -301,6 +293,7 @@ export const transformBlockToAgendaEntity = async (
     sessionsError: agendaDrawer?.sessionsError,
     rawBlock: block,
   }
+  return { ...task, actualTime: getTaskTimeTotals(task).actualMinutes }
 }
 
 /**

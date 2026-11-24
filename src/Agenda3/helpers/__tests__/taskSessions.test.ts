@@ -79,6 +79,48 @@ test('legacy schedules are read as one session without changing the task', () =>
   expect(getTaskSessions({ ...legacy, rawBlock: { ...legacy.rawBlock, repeated: true } })).toEqual([])
 })
 
+test('editing or clearing a legacy estimate freezes its box and preserves logs and notification timing after reload', async () => {
+  for (const estimatedTime of [120, undefined]) {
+    const { block } = mockBlock()
+    const initial = await transformBlockToAgendaEntity(block, { isInitialized: true }, [])
+    expect(initial.actualTime).toBe(120) // one-hour legacy box plus one-hour manual log
+    await updateTaskBlock({ ...initial, estimatedTime, projectId: 'page' }, initial)
+    const loaded = await transformBlockToAgendaEntity(block, { isInitialized: true }, [])
+    expect(loaded.estimatedTime).toBe(estimatedTime)
+    expect(loaded.actualTime).toBe(120)
+    expect(serializeSessions(getTaskSessions(loaded))).toBe(serializeSessions(getTaskSessions(initial)))
+    expect(loaded.timeLogs).toEqual(initial.timeLogs)
+    expect(block.content.match(/CLOCK:/g)).toHaveLength(1)
+    for (const text of [
+      'DOING [#A] Work',
+      'DEADLINE:',
+      'size: XL',
+      'priority: blocker',
+      'custom: https://host:42/path',
+      'notes:: keep',
+    ])
+      expect(block.content).toContain(text)
+    const since = dayjs('2026-11-24T13:59').valueOf()
+    const now = dayjs('2026-11-24T14:01').valueOf()
+    expect(getDueTaskEndNotifications([loaded], since, now)).toEqual(getDueTaskEndNotifications([initial], since, now))
+    expect(classifyNeedsReview([loaded], dayjs('2026-11-25')).overdue).toHaveLength(1)
+  }
+})
+
+test('freezing an estimate uses the latest schedule and leaves malformed sessions untouched', async () => {
+  const { block } = mockBlock()
+  const initial = await transformBlockToAgendaEntity(block, { isInitialized: true }, [])
+  block.content = block.content.replace('Tue 13:00', 'Tue 15:00')
+  await updateTaskBlock({ ...initial, estimatedTime: 180, projectId: 'page' }, initial)
+  expect(parseAgendaDrawer(block.content)?.sessions?.[0].start.format('HH:mm')).toBe('15:00')
+  expect(parseAgendaDrawer(block.content)?.sessions?.[0].end.format('HH:mm')).toBe('16:00')
+  const invalid = mockBlock(originalContent.replace('estimated: 1h', 'estimated: 1h\nsessions: {bad:json}'))
+  const invalidTask = await transformBlockToAgendaEntity(invalid.block, { isInitialized: true }, [])
+  await updateTaskBlock({ ...invalidTask, estimatedTime: 90, projectId: 'page' }, invalidTask)
+  expect(invalid.block.content).toContain('sessions: {bad:json}')
+  expect((await transformBlockToAgendaEntity(invalid.block, { isInitialized: true }, [])).actualTime).toBeUndefined()
+})
+
 test('adding, moving, resizing and removing sessions preserves the block and reloads', async () => {
   const { block } = mockBlock()
   await updateBlockSessions('task', { type: 'add', id: 'second', start: dayjs('2026-11-24T15:00') })

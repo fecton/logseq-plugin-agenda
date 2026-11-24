@@ -51,24 +51,26 @@ export function serializeSessions(sessions: readonly PlannedSession[]) {
 }
 
 export function supportsSessions(
-  task: Pick<AgendaEntity, 'rrule' | 'recurringPast' | 'rawBlock' | 'allDay' | 'end' | 'objective'>,
+  task: Partial<Pick<AgendaEntity, 'rrule' | 'recurringPast' | 'rawBlock' | 'allDay' | 'end' | 'objective'>>,
 ) {
   return !task.rrule && !task.recurringPast && !task.rawBlock?.repeated && !task.objective && !task.end
 }
 
 export function getTaskSessions(
-  task: Pick<
-    AgendaEntity,
-    | 'sessions'
-    | 'sessionsError'
-    | 'start'
-    | 'allDay'
-    | 'end'
-    | 'estimatedTime'
-    | 'rrule'
-    | 'recurringPast'
-    | 'rawBlock'
-    | 'objective'
+  task: Partial<
+    Pick<
+      AgendaEntity,
+      | 'sessions'
+      | 'sessionsError'
+      | 'start'
+      | 'allDay'
+      | 'end'
+      | 'estimatedTime'
+      | 'rrule'
+      | 'recurringPast'
+      | 'rawBlock'
+      | 'objective'
+    >
   >,
 ): PlannedSession[] {
   if (task.sessionsError || !supportsSessions(task)) return []
@@ -88,15 +90,6 @@ export function nextSessionDuration(task: AgendaEntity) {
   const sessions = getTaskSessions(task)
   const last = [...sessions].sort((a, b) => b.start.valueOf() - a.start.valueOf())[0]
   return last ? last.end.diff(last.start, 'minute') : task.estimatedTime ?? DEFAULT_ESTIMATED_TIME
-}
-
-export function loggedMinutesOnDay(task: AgendaEntity, day: string) {
-  const start = dayjs(day).startOf('day').valueOf()
-  const end = dayjs(day).startOf('day').add(1, 'day').valueOf()
-  return (task.timeLogs ?? []).reduce(
-    (sum, log) => sum + Math.max(0, Math.min(end, log.end.valueOf()) - Math.max(start, log.start.valueOf())) / 60000,
-    0,
-  )
 }
 
 export function applySessionOperation(task: AgendaEntity, operation: SessionOperation) {

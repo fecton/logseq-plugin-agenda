@@ -50,7 +50,7 @@ const useAgendaEntities = () => {
       | {
           type: 'task-date'
           id: string
-          data: { allDay: boolean; start: Dayjs; end?: Dayjs; estimatedTime?: number }
+          data: { allDay: boolean; start: Dayjs; end?: Dayjs }
         }
       | {
           type: 'task-status'

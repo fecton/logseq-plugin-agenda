@@ -10,7 +10,6 @@ import { useAtomValue } from 'jotai'
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 
 import { useTheme } from '@/Agenda3/components/ThemeProvider'
-import { genDurationString } from '@/Agenda3/helpers/block'
 import { transformAgendaTaskToCalendarEvent } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
 import { track } from '@/Agenda3/helpers/umami'
@@ -106,7 +105,7 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
       initialData: {
         startDateVal: dayjs(info.start),
         startTime: dayjs(info.start).format('HH:mm'),
-        estimatedTime: genDurationString(dayjs(info.end).diff(info.start, 'minute')),
+        sessions: [{ id: crypto.randomUUID(), start: dayjs(info.start), end: dayjs(info.end) }],
       },
     })
   }

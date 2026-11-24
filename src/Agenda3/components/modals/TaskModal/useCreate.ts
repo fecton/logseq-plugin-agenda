@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 
 import { parseDurationString } from '@/Agenda3/helpers/block'
 import { validateSessions, type PlannedSession } from '@/Agenda3/helpers/taskSessions'
+import { getTaskTimeTotals } from '@/Agenda3/helpers/taskTime'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { AgendaEntityDeadline } from '@/types/entity'
 import type { TaskPriority } from '@/types/taskPriority'
@@ -19,7 +20,6 @@ type BaseCreateTaskForm = {
   startTime?: string
   deadlineTime?: string
   estimatedTime?: string
-  actualTime?: string
   projectId?: string
   bindObjectiveId?: string
   size?: TaskSize
@@ -93,7 +93,22 @@ const useCreate = (initialData: Partial<CreateTaskForm> | null, messageApi: Mess
     setFormData(_initialData)
   }
 
-  return { formData, allDay, start, deadline, updateFormData, create, reset }
+  return {
+    formData,
+    allDay,
+    start,
+    deadline,
+    updateFormData,
+    create,
+    reset,
+    timeTotals: getTaskTimeTotals({
+      allDay,
+      start,
+      end: formData.endDateVal,
+      sessions: formData.sessions,
+      estimatedTime: formData.estimatedTime ? parseDurationString(formData.estimatedTime) : undefined,
+    }),
+  }
 }
 
 export const genStart = (allDay: boolean, date: Dayjs, startTime?: string) => {

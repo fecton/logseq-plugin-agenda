@@ -54,7 +54,9 @@ One task can have several timed sessions. Dragging its Kanban card into Time Box
 
 Kanban shows one card on each session-start day, with a session count and that day's planned duration. Moving a card between days moves sessions starting on its source day together. Priority, Size, task completion, and notes remain shared. Each session has its own end notification; completing the task stops all its notifications.
 
-Sessions are plans, not automatic work logs. Record work under **Actual Time → Add a log**. **Show Time Log** displays actual work, including unfinished tasks, in gray alongside planned sessions. The task estimate stays separate from total planned time.
+**Estimated Time** is entered or cleared only in the task editor. Scheduling never changes it. **Actual Time** is the full duration of all time boxes (including future ones) plus manual work logs. For example, a 2h estimate, two 1h sessions, and a 15m log display **Est: 2h · Actual: 2h15m**. Manual logs are additive, even when they overlap a time box; sessions do not create duplicate `CLOCK` records. Keep recording extra work under **Actual Time → Add a log**. **Show Time Log** controls the gray manual-log boxes, not the total.
+
+Kanban cards show task-wide Est and Actual totals. Column totals count each task's estimate only on its earliest session-start day (otherwise its scheduled or deadline day), and each session or log's full duration on its local start day, including overnight entries. Unset estimates display **—**. Changing a legacy task's estimate preserves the original box duration by saving it as a session; there is no bulk migration.
 
 Existing timed tasks remain compatible and are not bulk migrated. Session edits store a JSON `sessions` list in the `:AGENDA:` drawer and mirror the earliest session into `SCHEDULED`; manage these tasks' schedules through Sessions. The final session can be removed without losing the task or its deadline. Same-task overlaps are rejected; overnight and adjacent sessions are supported. Recurring and multi-day all-day tasks retain their existing behavior.
 

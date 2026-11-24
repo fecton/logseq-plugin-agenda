@@ -68,7 +68,7 @@ export default function useSessionScheduling() {
                       ? dayjs(event.end).subtract(1, 'day')
                       : undefined,
                 }
-              : { estimatedTime: dayjs(event.end).diff(start, 'minute') }),
+              : {}),
           },
         })
       }

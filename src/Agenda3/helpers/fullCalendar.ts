@@ -16,7 +16,7 @@ export const transformAgendaTaskToCalendarEvent = (
   },
 ): CalendarEvent[] => {
   const { showFirstEventInCycleOnly = false, showTimeLog = false, groupType } = options
-  const { estimatedTime = DEFAULT_ESTIMATED_TIME, timeLogs = [], status, actualTime } = task
+  const { estimatedTime = DEFAULT_ESTIMATED_TIME, timeLogs = [], status } = task
   const sessions = getTaskSessions(task)
   const logs: CalendarEvent[] = showTimeLog
     ? timeLogs.map((log, index) => ({
@@ -63,7 +63,7 @@ export const transformAgendaTaskToCalendarEvent = (
   if (task.start) {
     const _task = task as AgendaTaskWithStart
     allDay = _task.allDay
-    spanTime = status === 'done' && actualTime && showTimeLog ? actualTime : estimatedTime
+    spanTime = estimatedTime
     start = _task.start.toDate()
     end = _task.end ? _task.end.add(1, 'day').toDate() : _task.start.add(spanTime, 'minute').toDate()
   } else {

@@ -3,7 +3,7 @@ import { useAtomValue } from 'jotai'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 
 import { DATE_FORMATTER_FOR_KEY, separateTasksInDay, transformTasksToKanbanTasks } from '@/Agenda3/helpers/task'
-import { recentTasksAtom } from '@/Agenda3/models/entities/tasks'
+import { calendarTasksAtom, recentTasksAtom } from '@/Agenda3/models/entities/tasks'
 import { settingsAtom } from '@/Agenda3/models/settings'
 import { getRecentDaysRange } from '@/constants/agenda'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
@@ -25,9 +25,12 @@ const KanBan = (props, ref) => {
   const settings = useAtomValue(settingsAtom)
 
   const recentTasks = useAtomValue(recentTasksAtom)
+  const allTasks = useAtomValue(calendarTasksAtom)
+  const visible = (task: { status: string }) => !settings.viewOptions?.hideCompleted || task.status !== 'done'
+  const accountingTasks = allTasks.filter(visible)
   const tasks = transformTasksToKanbanTasks(recentTasks, {
     showFirstEventInCycleOnly: settings.viewOptions?.showFirstEventInCycleOnly,
-  })
+  }).filter(visible)
   const tasksInDay = separateTasksInDay(tasks)
   const days = getRecentDays()
 
@@ -59,6 +62,7 @@ const KanBan = (props, ref) => {
             day={day}
             tasks={columnTasks}
             allKanbanItems={tasks}
+            accountingTasks={accountingTasks}
           />
         )
       })}

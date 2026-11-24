@@ -89,5 +89,10 @@
   "Session duration": "Session duration",
   "Planned time": "Planned time",
   "Sessions manage this task’s schedule. Each box can be moved separately.": "Sessions manage this task’s schedule. Each box can be moved separately.",
-  "Delete task": "Delete task"
+  "Delete task": "Delete task",
+  "Est": "Est",
+  "Actual": "Actual",
+  "Time boxes": "Time boxes",
+  "Manual logs": "Manual logs",
+  "Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.": "Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box."
 }

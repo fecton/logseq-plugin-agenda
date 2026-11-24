@@ -3,6 +3,7 @@ import dayjs from 'dayjs'
 import type { ReactNode } from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
 
+import type { AgendaEntity } from '@/types/entity'
 import type { AgendaTaskWithStart } from '@/types/task'
 
 import Column from './Column'
@@ -15,7 +16,11 @@ vi.mock('@/Agenda3/hooks/useAgendaEntities', () => ({ default: () => ({ updateEn
 vi.mock('@/Agenda3/helpers/umami', () => ({ track: vi.fn() }))
 vi.mock('@fullcalendar/interaction', () => ({ ThirdPartyDraggable: vi.fn() }))
 vi.mock('./ColumnTitle', () => ({ default: () => null }))
-vi.mock('./AddTaskCard', () => ({ default: () => null }))
+vi.mock('./AddTaskCard', () => ({
+  default: ({ estimatedTime, actualTime }) => (
+    <output data-testid="daily-totals">{`${estimatedTime ?? 'unset'}:${actualTime ?? 'unavailable'}`}</output>
+  ),
+}))
 vi.mock('./taskCard/TaskCard', () => ({ default: ({ task }) => <article>{task.id}</article> }))
 vi.mock('react-sortablejs', () => ({
   ReactSortable: ({
@@ -104,4 +109,26 @@ test('renders priority order, reorders refreshed tasks, and retains cross-day sc
   const refreshed = tasks.map((t) => (t.id === 'low' ? { ...t, priority: 'blocker' as const } : t))
   rerender(<Column day={day} tasks={refreshed} allKanbanItems={refreshed} />)
   expect(screen.getAllByRole('article').map((el) => el.textContent)).toEqual(['low', 'high', 'unset', 'medium', 'done'])
+})
+
+test('daily totals include logs on days without cards and follow accounting task refreshes', () => {
+  const task: AgendaEntity = {
+    id: 'log-only',
+    title: 'Logged work',
+    showTitle: 'Logged work',
+    status: 'todo',
+    allDay: true,
+    project: { id: 'page', originalName: 'Work', isJournal: false },
+    rawBlock: {} as AgendaEntity['rawBlock'],
+    sessions: [],
+    estimatedTime: 120,
+    timeLogs: [{ start: dayjs('2026-11-25T14:00'), end: dayjs('2026-11-25T14:15'), amount: 15 }],
+  }
+  const { rerender } = render(
+    <Column day={dayjs('2026-11-25')} tasks={[]} allKanbanItems={[]} accountingTasks={[task]} />,
+  )
+  expect(screen.getByTestId('daily-totals')).toHaveTextContent('unset:15')
+  expect(screen.queryByRole('article')).toBeNull()
+  rerender(<Column day={dayjs('2026-11-25')} tasks={[]} allKanbanItems={[]} accountingTasks={[]} />)
+  expect(screen.getByTestId('daily-totals')).toHaveTextContent('unset:0')
 })

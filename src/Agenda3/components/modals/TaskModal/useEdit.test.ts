@@ -34,15 +34,36 @@ test('session edits preserve estimate, support cancel/retry and removing the las
     }),
   )
   expect(updateEntity).not.toHaveBeenCalled()
+  expect(result.current.timeTotals.actualMinutes).toBe(120)
   act(() => result.current.reset())
   expect(result.current.formData.sessions).toEqual([first])
+  expect(result.current.timeTotals.actualMinutes).toBe(60)
   act(() => result.current.updateFormData({ sessions: [] }))
   updateEntity.mockRejectedValueOnce(new Error('offline'))
   await expect(result.current.edit()).rejects.toThrow('offline')
   expect(result.current.formData.sessions).toEqual([])
+  expect(result.current.timeTotals.actualMinutes).toBe(0)
   await result.current.edit()
   expect(updateEntity.mock.calls[1][0].data).toMatchObject({ sessions: [], estimatedTime: 90 })
   expect(task.sessions).toEqual([first])
+})
+
+test('draft estimates do not resize legacy boxes and logs add to Actual before saving', async () => {
+  const task = { ...initial, allDay: false, start: dayjs('2026-11-24T13:00'), estimatedTime: 60 }
+  const { result } = renderHook(() => useEdit(task, messages))
+  act(() => result.current.updateFormData({ estimatedTime: '2h' }))
+  expect(result.current.timeTotals.actualMinutes).toBe(60)
+  act(() =>
+    result.current.updateFormData({ timeLogs: [{ start: task.start, end: task.start.add(15, 'minute'), amount: 15 }] }),
+  )
+  expect(result.current.timeTotals).toEqual({ sessionMinutes: 60, manualLogMinutes: 15, actualMinutes: 75 })
+  expect(updateEntity).not.toHaveBeenCalled()
+  act(() => result.current.reset())
+  expect(result.current.timeTotals.actualMinutes).toBe(60)
+  act(() => result.current.updateFormData({ estimatedTime: undefined }))
+  await result.current.edit()
+  expect(updateEntity.mock.lastCall?.[0].data.estimatedTime).toBeUndefined()
+  expect(result.current.timeTotals.actualMinutes).toBe(60)
 })
 
 test('session form rejects overlaps before saving', async () => {

@@ -7,11 +7,11 @@ import React from 'react'
 import { ReactSortable } from 'react-sortablejs'
 
 import { sortKanbanTasks } from '@/Agenda3/helpers/taskPriority'
-import { loggedMinutesOnDay } from '@/Agenda3/helpers/taskSessions'
+import { getDailyTimeTotals } from '@/Agenda3/helpers/taskTime'
 import { track } from '@/Agenda3/helpers/umami'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import { appAtom } from '@/Agenda3/models/app'
-import { DEFAULT_ESTIMATED_TIME } from '@/constants/agenda'
+import type { AgendaEntity } from '@/types/entity'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
 import { cn, replaceDateInfo } from '@/util/util'
 
@@ -20,8 +20,13 @@ import ColumnTitle from './ColumnTitle'
 import type { KanBanItem } from './KanBan'
 import TaskCard from './taskCard/TaskCard'
 
-export type ColumnProps = { day: Dayjs; tasks: AgendaTaskWithStartOrDeadline[]; allKanbanItems: KanBanItem[] }
-const Column = ({ day, tasks, allKanbanItems }: ColumnProps, ref) => {
+export type ColumnProps = {
+  day: Dayjs
+  tasks: AgendaTaskWithStartOrDeadline[]
+  allKanbanItems: KanBanItem[]
+  accountingTasks?: AgendaEntity[]
+}
+const Column = ({ day, tasks, allKanbanItems, accountingTasks = allKanbanItems }: ColumnProps, ref) => {
   const columnContainerRef = useRef<HTMLDivElement>(null)
   // bind draggable
   const hadBindDropRef = useRef(false)
@@ -35,17 +40,10 @@ const Column = ({ day, tasks, allKanbanItems }: ColumnProps, ref) => {
   const doneTasks = tasks.filter((task) => task.status === 'done')
   const undoneTasks = tasks.filter((task) => task.status !== 'done')
   const _dayTasks = sortKanbanTasks(tasks)
-  const estimatedTime = _dayTasks.reduce((acc, task) => {
-    return acc + (task.dayPlannedMinutes ?? task.estimatedTime ?? DEFAULT_ESTIMATED_TIME)
-  }, 0)
-  const actualTime = _dayTasks.reduce((acc, task) => {
-    return (
-      acc +
-      (task.sessionDay
-        ? loggedMinutesOnDay(task, task.sessionDay)
-        : task.actualTime ?? task.estimatedTime ?? DEFAULT_ESTIMATED_TIME)
-    )
-  }, 0)
+  const { estimatedMinutes: estimatedTime, actualMinutes: actualTime } = getDailyTimeTotals(
+    accountingTasks,
+    day.format('YYYY-MM-DD'),
+  )
 
   const { updateEntity } = useAgendaEntities()
 

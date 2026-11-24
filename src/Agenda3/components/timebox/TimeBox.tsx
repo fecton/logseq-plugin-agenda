@@ -12,7 +12,6 @@ import { MdSchedule } from 'react-icons/md'
 
 // import useTheme from '@/hooks/useTheme'
 import { useTheme } from '@/Agenda3/components/ThemeProvider'
-import { genDurationString } from '@/Agenda3/helpers/block'
 import { transformAgendaTaskToCalendarEvent } from '@/Agenda3/helpers/fullCalendar'
 import { track } from '@/Agenda3/helpers/umami'
 import useSessionScheduling, { captureSessionLeave } from '@/Agenda3/hooks/useSessionScheduling'
@@ -157,7 +156,7 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
             initialData: {
               startDateVal: dayjs(info.start),
               startTime: dayjs(info.start).format('HH:mm'),
-              estimatedTime: genDurationString(dayjs(info.end).diff(info.start, 'minute')),
+              sessions: [{ id: crypto.randomUUID(), start: dayjs(info.start), end: dayjs(info.end) }],
             },
           })
           track('Time Box: Select Event')

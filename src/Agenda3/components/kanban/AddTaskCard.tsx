@@ -2,10 +2,10 @@ import dayjs, { type Dayjs } from 'dayjs'
 import { useTranslation } from 'react-i18next'
 import { IoAddCircleOutline } from 'react-icons/io5'
 
-import { minutesToHHmm } from '@/Agenda3/helpers/fullCalendar'
 import { track } from '@/Agenda3/helpers/umami'
 import { cn } from '@/util/util'
 
+import TaskTimeBadges from '../TaskTimeBadges'
 import TaskModal from '../modals/TaskModal'
 
 const AddTaskCard = ({
@@ -17,7 +17,7 @@ const AddTaskCard = ({
   day: Dayjs
   isGray: boolean
   actualTime?: number
-  estimatedTime: number
+  estimatedTime?: number
 }) => {
   const { t } = useTranslation()
   const isToday = day.isSame(dayjs(), 'day')
@@ -27,7 +27,8 @@ const AddTaskCard = ({
       <div
         onClick={() => track('KanBan: Add Task Button', { today: String(isToday) })}
         className={cn(
-          'group my-2 flex cursor-pointer items-center justify-between rounded-md bg-white p-2 text-sm text-gray-400 hover:shadow dark:bg-zinc-700',
+          `group my-2 flex cursor-pointer items-center justify-between rounded-md bg-white p-2 text-sm text-gray-400 hover:shadow
+          dark:bg-zinc-700`,
           {
             'bg-[#edeef0] dark:bg-[#2f2f33]': isGray,
           },
@@ -39,15 +40,7 @@ const AddTaskCard = ({
             {t('Add a task')}
           </span>
         </div>
-        {actualTime ? (
-          <div className="rounded bg-gray-200 px-1 py-0.5 text-[10px] text-xs dark:bg-zinc-800">
-            {minutesToHHmm(actualTime)} / {minutesToHHmm(estimatedTime)}
-          </div>
-        ) : (
-          <div className="rounded bg-gray-200 px-1 py-0.5 text-[10px] text-xs dark:bg-zinc-800">
-            {minutesToHHmm(estimatedTime)}
-          </div>
-        )}
+        <TaskTimeBadges estimatedTime={estimatedTime} actualTime={actualTime} />
       </div>
     </TaskModal>
   )

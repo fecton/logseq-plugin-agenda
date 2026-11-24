@@ -4,11 +4,11 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReactSortable } from 'react-sortablejs'
 
+import { getTaskTimeTotals } from '@/Agenda3/helpers/taskTime'
 import { track } from '@/Agenda3/helpers/umami'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import { appAtom } from '@/Agenda3/models/app'
 import { settingsAtom } from '@/Agenda3/models/settings'
-import { DEFAULT_ESTIMATED_TIME } from '@/constants/agenda'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaObjectiveWithTasks } from '@/types/objective'
 import type { AgendaTaskWithStart } from '@/types/task'
@@ -43,8 +43,12 @@ const CycleColumn = ({
   const isTodayLastDayOfWeek = today.isSame(dayMap.week, 'day')
   const isTodayLastDayOfMonth = today.isSame(dayMap.month, 'day')
 
-  const estimatedTime = tasks.reduce((acc, task) => {
-    return acc + (task.estimatedTime ?? DEFAULT_ESTIMATED_TIME)
+  const uniqueTasks = [...new Map(tasks.map((task) => [task.id, task])).values()]
+  const estimates = uniqueTasks.flatMap((task) => (task.estimatedTime === undefined ? [] : [task.estimatedTime]))
+  const estimatedTime = estimates.length ? estimates.reduce((a, b) => a + b, 0) : undefined
+  const actualTime = uniqueTasks.reduce<number | undefined>((sum, task) => {
+    const actual = getTaskTimeTotals(task).actualMinutes
+    return sum === undefined || actual === undefined ? undefined : sum + actual
   }, 0)
 
   const { updateEntity } = useAgendaEntities()
@@ -72,7 +76,7 @@ const CycleColumn = ({
         </div>
       ) : (
         <>
-          <AddTaskCard day={day} isGray={false} estimatedTime={estimatedTime} />
+          <AddTaskCard day={day} isGray={false} estimatedTime={estimatedTime} actualTime={actualTime} />
           <ReactSortable
             forceFallback // 该属性如果不加就无法与 fullcalendar 交互
             className={cn('hide-scroll-bar flex flex-1 flex-col gap-2 overflow-y-auto')}

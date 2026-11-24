@@ -83,10 +83,8 @@ describe('planning edits preserve task data', () => {
     const content =
       'DOING [#A] Task\nSCHEDULED: <2026-10-01 Thu 09:00>\n:AGENDA:\nestimated: 1h\nsize: XL\npriority: highest\n:END:'
     const { block } = mockBlock(content)
-    await updateBlockDateInfo({ uuid: 'task', start: dayjs('2026-11-24T14:00'), allDay: false, estimatedTime: 90 })
-    expect(block.content).toBe(
-      content.replace('2026-10-01 Thu 09:00', '2026-11-24 Tue 14:00').replace('estimated: 1h', 'estimated: 1h30m'),
-    )
+    await updateBlockDateInfo({ uuid: 'task', start: dayjs('2026-11-24T14:00'), allDay: false })
+    expect(block.content).toBe(content.replace('2026-10-01 Thu 09:00', '2026-11-24 Tue 14:00'))
   })
 
   test('scheduling a backlog task preserves blank lines in its notes', async () => {

@@ -33,7 +33,7 @@ export type AgendaEntity = {
   estimatedTime?: number // unit: minute, from agenda drawer estimated
   size?: TaskSize // relative task size, from agenda drawer size
   priority?: TaskPriority // agenda drawer priority; independent of Logseq A/B/C
-  actualTime?: number // unit: minute
+  actualTime?: number // derived session durations + manual logs, in minutes; undefined for invalid sessions
   timeLogs?: TimeLog[] // from logbook
   subtasks?: AgendaEntity[] // children blocks which are task
   notes?: string[] // children blocks which are normal block

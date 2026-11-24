@@ -46,15 +46,9 @@ const insertScheduled = (content: string, scheduled: string) => {
 }
 
 /**
- * change task date and estimated time
+ * Change scheduling only; estimates can only be changed through task editing.
  */
-export const updateBlockDateInfo = async (dateInfo: {
-  uuid: string
-  allDay: boolean
-  start: Dayjs
-  end?: Dayjs
-  estimatedTime?: number
-}) => {
+export const updateBlockDateInfo = async (dateInfo: { uuid: string; allDay: boolean; start: Dayjs; end?: Dayjs }) => {
   const { uuid, allDay, start } = dateInfo
   const originalBlock = await logseq.Editor.getBlock(uuid)
   if (!originalBlock) return Promise.reject(new Error('Block not found'))
@@ -73,9 +67,8 @@ export const updateBlockDateInfo = async (dateInfo: {
         })
         .join('\n')
     : insertScheduled(originalBlock.content, scheduledText)
-  // update estimated time and end date
+  // update end date
   const drawer: AgendaDrawer = {}
-  if ('estimatedTime' in dateInfo) drawer.estimated = dateInfo.estimatedTime
   if ('end' in dateInfo) {
     drawer.end = dateInfo.end
   } else {
@@ -242,6 +235,9 @@ export const deleteBlogTimeLog = async (uuid: string, index: number) => {
  * create task
  */
 export const createTaskBlock = async (taskInfo: CreateAgendaTask) => {
+  if (taskInfo.sessions === undefined && taskInfo.start && !taskInfo.allDay && !taskInfo.end) {
+    taskInfo = { ...taskInfo, sessions: getTaskSessions(taskInfo) }
+  }
   if (taskInfo.sessions !== undefined) {
     const sessions = validateSessions(taskInfo.sessions)
     taskInfo = { ...taskInfo, sessions, start: sessions[0]?.start, allDay: false, end: undefined }
@@ -325,14 +321,37 @@ export const updateTaskBlock = async (taskInfo: AgendaEntity & { projectId?: str
   }
   if (changed(deadline, originalTask?.deadline)) content = updateBlockDeadline(content, deadline)
   const drawer: AgendaDrawer = {}
+  // Freeze a legacy timed box before changing the estimate that used to define its length.
+  // Read the latest block so a concurrent scheduling change is not overwritten.
+  const latest = readBlockSessionTask(originalBlock)
+  const frozenSessions =
+    taskInfo.sessions === undefined &&
+    start &&
+    !allDay &&
+    !end &&
+    latest.sessions === undefined &&
+    changed(estimatedTime, originalTask?.estimatedTime) &&
+    !latest.sessionsError
+      ? getTaskSessions(latest)
+      : []
   if (changed(estimatedTime, originalTask?.estimatedTime)) drawer.estimated = estimatedTime
   if (changed(end, originalTask?.end)) drawer.end = end
   if (changed(bindObjectiveId, originalTask?.bindObjectiveId)) drawer.bindObjectiveId = bindObjectiveId
   if ('size' in taskInfo && changed(size, originalTask?.size)) drawer.size = size
   if ('priority' in taskInfo && changed(priority, originalTask?.priority)) drawer.priority = priority
   content = updateBlockAgendaDrawer(content, drawer)
+  if (frozenSessions.length) {
+    const shift = start && latest.start && changed(start, originalTask?.start) ? start.diff(latest.start, 'minute') : 0
+    content = writeSessionsContent(
+      content,
+      frozenSessions.map((session) => ({
+        ...session,
+        start: session.start.add(shift, 'minute'),
+        end: session.end.add(shift, 'minute'),
+      })),
+    )
+  }
   if (taskInfo.sessions !== undefined) {
-    const latest = readBlockSessionTask(originalBlock)
     if (latest.sessionsError) throw new Error(latest.sessionsError)
     const sessions = mergeSessionEdits(
       getTaskSessions(latest),

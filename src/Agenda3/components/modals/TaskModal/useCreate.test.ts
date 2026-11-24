@@ -44,4 +44,17 @@ test('creates sessions even when the separate start date is cleared', async () =
   await result.current.create()
   expect(messages.error).not.toHaveBeenCalled()
   expect(addNewEntity.mock.lastCall?.[0].data.sessions).toEqual(sessions)
+  expect(addNewEntity.mock.lastCall?.[0].data.estimatedTime).toBeUndefined()
+  expect(result.current.timeTotals.actualMinutes).toBe(60)
+})
+
+test('a selected time range starts with an unset estimate and an independent session duration', async () => {
+  const messages = { error: vi.fn() } as unknown as MessageInstance
+  const sessions = [{ id: 'range', start: dayjs('2026-11-24T13:00'), end: dayjs('2026-11-24T14:00') }]
+  const { result } = renderHook(() => useCreate({ title: 'Selected range', sessions }, messages))
+  expect(result.current.formData.estimatedTime).toBeUndefined()
+  act(() => result.current.updateFormData({ estimatedTime: '2h' }))
+  expect(result.current.timeTotals.actualMinutes).toBe(60)
+  await result.current.create()
+  expect(addNewEntity.mock.lastCall?.[0].data).toMatchObject({ estimatedTime: 120, sessions })
 })

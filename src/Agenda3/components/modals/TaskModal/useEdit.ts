@@ -6,6 +6,7 @@ import { object, string, optional, special, type Output, safeParse, array, numbe
 
 import { genDurationString, parseDurationString } from '@/Agenda3/helpers/block'
 import { getTaskSessions, serializeSessions, validateSessions } from '@/Agenda3/helpers/taskSessions'
+import { getTaskTimeTotals } from '@/Agenda3/helpers/taskTime'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { AgendaEntity, AgendaEntityDeadline } from '@/types/entity'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
@@ -22,7 +23,6 @@ const BaseFormSchema = object({
   startTime: optional(string()),
   deadlineTime: optional(string()),
   estimatedTime: optional(string()),
-  actualTime: optional(string()),
   timeLogs: optional(
     array(
       object({
@@ -69,7 +69,6 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
       initialTask?.deadline && !initialTask.deadline.allDay ? initialTask.deadline.value.format('HH:mm') : undefined,
     startTime: initialTask?.start && !initialTask.allDay ? initialTask.start.format('HH:mm') : undefined,
     estimatedTime: initialTask?.estimatedTime ? genDurationString(initialTask.estimatedTime) : undefined,
-    actualTime: initialTask?.actualTime ? genDurationString(initialTask.actualTime) : undefined,
     timeLogs: initialTask?.timeLogs || [],
     projectId: initialTask?.project?.id,
     bindObjectiveId: initialTask?.bindObjectiveId,
@@ -101,12 +100,7 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
       if (data.startDateVal && !('endDateVal' in data) && _data.startDateVal && _data.endDateVal) {
         newData.endDateVal = data.startDateVal.add(_data.endDateVal.diff(_data.startDateVal, 'day'), 'day')
       }
-      return {
-        ...newData,
-        actualTime: newData.timeLogs
-          ? genDurationString(newData.timeLogs.reduce((acc, cur) => acc + cur.amount, 0))
-          : undefined,
-      }
+      return newData
     })
   }
   const reset = () => {
@@ -154,7 +148,7 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
         deadline: deadline as AgendaEntityDeadline,
         end: result.output.endDateVal,
         estimatedTime: estimatedTime ? parseDurationString(estimatedTime) : undefined,
-        // actual time is generated from time logs
+        // Actual is derived again after saving, never stored in the block.
         actualTime: undefined,
         projectId: result.output.projectId,
       },
@@ -162,6 +156,15 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
   }
 
   return {
+    timeTotals: getTaskTimeTotals({
+      ...initialTask,
+      allDay,
+      start,
+      end: formData.endDateVal,
+      estimatedTime: formData.estimatedTime ? parseDurationString(formData.estimatedTime) : undefined,
+      sessions: formData.sessions,
+      timeLogs: formData.timeLogs,
+    }),
     formData,
     updateFormData,
     reset,

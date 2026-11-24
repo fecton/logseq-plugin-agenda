@@ -89,5 +89,10 @@
   "Session duration": "时段时长",
   "Planned time": "计划时长",
   "Sessions manage this task’s schedule. Each box can be moved separately.": "此任务通过时段管理日程，每个时间块都可以单独移动。",
-  "Delete task": "删除任务"
+  "Delete task": "删除任务",
+  "Est": "预估",
+  "Actual": "实际",
+  "Time boxes": "时间块",
+  "Manual logs": "手动日志",
+  "Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.": "实际时间包含未来时间块的完整时长。手动日志会额外计入，即使与时间块重叠。"
 }

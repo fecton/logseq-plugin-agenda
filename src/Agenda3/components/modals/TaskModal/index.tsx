@@ -10,6 +10,7 @@ import { IoIosCheckmarkCircleOutline, IoMdCloseCircle } from 'react-icons/io'
 import { RiCheckboxBlankCircleLine, RiDeleteBin4Line } from 'react-icons/ri'
 
 import { parseDurationString } from '@/Agenda3/helpers/block'
+import { minutesToHHmm } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
 import { track } from '@/Agenda3/helpers/umami'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
@@ -87,6 +88,7 @@ const TaskModal = ({
     allDay,
     start,
     deadline,
+    timeTotals,
   } = info.type === 'create' ? createHookResult : editHookResult
   const { create } = createHookResult
   useEffect(() => {
@@ -434,6 +436,9 @@ const TaskModal = ({
             bordered={false}
             className="w-[100px]"
             value={formData.estimatedTime}
+            aria-label={t('Estimated Time')}
+            placeholder="—"
+            disabled={editDisabled || saving}
             onChange={(val) => updateFormData({ estimatedTime: val })}
           />
         </div>
@@ -461,18 +466,38 @@ const TaskModal = ({
         </div>
 
         {/* ========= Actual Time Start ========= */}
-        {info.type === 'edit' ? (
+        <>
           <div className="flex items-start">
             <div className="flex h-[32px] w-[160px] items-center gap-1 text-gray-400">
               <BsClockHistory /> {t('Actual Time')}
             </div>
             <div>
-              <div className="flex h-[32px] cursor-pointer items-center gap-2 px-3 py-1">
-                {formData.actualTime}
-                <div className="text-xs text-gray-400 hover:text-gray-800" onClick={addDefaultTimeLog}>
-                  ({t('Add a log')})
-                </div>
+              <div className="flex min-h-[32px] items-center gap-2 px-3 py-1">
+                <span aria-label={t('Actual Time')}>
+                  {timeTotals.actualMinutes === undefined ? '—' : minutesToHHmm(timeTotals.actualMinutes)}
+                </span>
+                {info.type === 'edit' ? (
+                  <button
+                    type="button"
+                    disabled={editDisabled || saving}
+                    className="text-xs text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                    onClick={addDefaultTimeLog}
+                  >
+                    ({t('Add a log')})
+                  </button>
+                ) : null}
               </div>
+              <div className="px-3 text-xs text-gray-500 dark:text-gray-400">
+                {t('Time boxes')}:{' '}
+                {timeTotals.sessionMinutes === undefined ? '—' : minutesToHHmm(timeTotals.sessionMinutes)}
+                {' + '}
+                {t('Manual logs')}: {minutesToHHmm(timeTotals.manualLogMinutes)}
+              </div>
+              <p className="max-w-[320px] px-3 py-1 text-xs text-gray-500 dark:text-gray-400">
+                {t(
+                  'Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.',
+                )}
+              </p>
               {editHookResult.formData.timeLogs?.map((timeLog, index) => (
                 <div key={index} className="group flex w-[220px] items-center justify-between">
                   <TimeLogComponent
@@ -487,7 +512,7 @@ const TaskModal = ({
               ))}
             </div>
           </div>
-        ) : null}
+        </>
         {/* ========= Actual Time End ========= */}
 
         {/* ========= Objective Start ========= */}
