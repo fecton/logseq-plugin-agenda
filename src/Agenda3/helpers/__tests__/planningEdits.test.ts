@@ -45,7 +45,7 @@ describe('planning edits preserve task data', () => {
 
   test('date-only rescheduling preserves duration, deadline and multi-day span', async () => {
     const content =
-      'DOING Test\nSCHEDULED: <2026-10-01 Thu>\nDEADLINE: <2026-10-08 Thu>\n:AGENDA:\nestimated: 45m\nend: 2026-10-03\nbindObjectiveId: goal\ncustom: leave me\n:END:\nSome notes'
+      'DOING Test\nSCHEDULED: <2026-10-01 Thu>\nDEADLINE: <2026-10-08 Thu>\n:AGENDA:\nestimated: 45m\nend: 2026-10-03\nbindObjectiveId: goal\nsize: XL\npriority: high\ncustom: leave me\n:END:\nSome notes'
     const { block } = mockBlock(content)
     await updateBlockDateInfo({ uuid: 'task', start: dayjs('2026-11-23'), allDay: true })
     expect(block.content).toBe(
@@ -77,6 +77,16 @@ describe('planning edits preserve task data', () => {
       content.replace('SCHEDULED: <2026-10-01 Thu 09:00>', 'SCHEDULED: <2026-11-23 Mon 09:00>'),
     )
     expect(move).not.toHaveBeenCalled()
+  })
+
+  test('Time Box scheduling preserves priority, size and native markers', async () => {
+    const content =
+      'DOING [#A] Task\nSCHEDULED: <2026-10-01 Thu 09:00>\n:AGENDA:\nestimated: 1h\nsize: XL\npriority: highest\n:END:'
+    const { block } = mockBlock(content)
+    await updateBlockDateInfo({ uuid: 'task', start: dayjs('2026-11-24T14:00'), allDay: false, estimatedTime: 90 })
+    expect(block.content).toBe(
+      content.replace('2026-10-01 Thu 09:00', '2026-11-24 Tue 14:00').replace('estimated: 1h', 'estimated: 1h30m'),
+    )
   })
 
   test('scheduling a backlog task preserves blank lines in its notes', async () => {

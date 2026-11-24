@@ -6,6 +6,7 @@ import { useEffect, useImperativeHandle, useRef } from 'react'
 import React from 'react'
 import { ReactSortable } from 'react-sortablejs'
 
+import { sortKanbanTasks } from '@/Agenda3/helpers/taskPriority'
 import { track } from '@/Agenda3/helpers/umami'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import { appAtom } from '@/Agenda3/models/app'
@@ -32,7 +33,7 @@ const Column = ({ day, tasks, allKanbanItems }: ColumnProps, ref) => {
   const isToday = day.isSame(today, 'day')
   const doneTasks = tasks.filter((task) => task.status === 'done')
   const undoneTasks = tasks.filter((task) => task.status !== 'done')
-  const _dayTasks = undoneTasks.concat(doneTasks)
+  const _dayTasks = sortKanbanTasks(tasks)
   const estimatedTime = _dayTasks.reduce((acc, task) => {
     return acc + (task.estimatedTime ?? DEFAULT_ESTIMATED_TIME)
   }, 0)
@@ -114,6 +115,7 @@ const Column = ({ day, tasks, allKanbanItems }: ColumnProps, ref) => {
 
         {/* ========= Tasks List ========= */}
         <ReactSortable
+          sort={false}
           forceFallback // 该属性如果不加就无法与 fullcalendar 交互
           className={cn('flex flex-1 flex-col gap-2 overflow-y-auto', { 'pb-28': _dayTasks.length === 0 })}
           group="shared"

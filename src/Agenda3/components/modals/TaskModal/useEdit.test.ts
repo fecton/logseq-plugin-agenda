@@ -86,3 +86,30 @@ test('loads size, retains failed edits, resets cancelled changes and allows clea
   await result.current.edit()
   expect(updateEntity.mock.calls[1][0].data).toHaveProperty('size', undefined)
 })
+
+test('existing tasks stay unset; failed priority edits are retained and can be retried or cancelled', async () => {
+  const task = { ...initial, start: dayjs('2026-11-24'), priority: undefined }
+  const { result } = renderHook(() => useEdit(task, messages))
+  expect(result.current.formData.priority).toBeUndefined()
+  await result.current.edit()
+  expect(updateEntity.mock.lastCall?.[0].data).toHaveProperty('priority', undefined)
+  act(() => result.current.updateFormData({ priority: 'highest' }))
+  updateEntity.mockRejectedValueOnce(new Error('offline'))
+  await expect(result.current.edit()).rejects.toThrow('offline')
+  expect(result.current.formData.priority).toBe('highest')
+  expect(task.priority).toBeUndefined()
+  await result.current.edit()
+  expect(updateEntity.mock.lastCall?.[0].data.priority).toBe('highest')
+  act(() => result.current.reset())
+  expect(result.current.formData.priority).toBeUndefined()
+})
+
+test('loads an existing priority and persists an explicit clear', async () => {
+  const task = { ...initial, start: dayjs('2026-11-24'), priority: 'low' as const }
+  const { result } = renderHook(() => useEdit(task, messages))
+  expect(result.current.formData.priority).toBe('low')
+  act(() => result.current.updateFormData({ priority: undefined }))
+  await result.current.edit()
+  expect(updateEntity.mock.lastCall?.[0].data).toHaveProperty('priority', undefined)
+  expect(task.priority).toBe('low')
+})

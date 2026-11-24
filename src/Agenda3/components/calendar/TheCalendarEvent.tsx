@@ -7,6 +7,7 @@ import { IoIosCheckmarkCircle } from 'react-icons/io'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
 import { cn } from '@/util/util'
 
+import TaskPriorityBadge from '../TaskPriorityBadge'
 import TaskSizeBadge from '../TaskSizeBadge'
 
 const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
@@ -37,6 +38,7 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: info.event.backgroundColor }} />
           )}
           <span className="flex-1 truncate">{showTitle}</span>
+          <TaskPriorityBadge priority={taskData?.priority} compact />
           <TaskSizeBadge size={taskData?.size} />
           {isDone ? (
             <IoIosCheckmarkCircle className={cn('shrink-0', info.event.allDay ? 'text-white' : 'text-green-500')} />
@@ -62,6 +64,7 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
             })}
           >
             <TaskSizeBadge size={taskData?.size} className="mr-1 align-middle" />
+            <TaskPriorityBadge priority={taskData?.priority} compact className="mr-1 align-middle" />
             {showTitle}
           </div>
           {isShowTimeText ? <div className="text-xs text-gray-200">{info.timeText}</div> : null}

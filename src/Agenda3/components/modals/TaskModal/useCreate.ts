@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next'
 import { parseDurationString } from '@/Agenda3/helpers/block'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { AgendaEntityDeadline } from '@/types/entity'
+import type { TaskPriority } from '@/types/taskPriority'
 import type { TaskSize } from '@/types/taskSize'
 import { replaceTimeInfo } from '@/util/util'
 
@@ -21,6 +22,7 @@ type BaseCreateTaskForm = {
   projectId?: string
   bindObjectiveId?: string
   size?: TaskSize
+  priority?: TaskPriority
 }
 export type CreateTaskForm =
   | (BaseCreateTaskForm & {
@@ -32,15 +34,17 @@ export type CreateTaskForm =
 const useCreate = (initialData: Partial<CreateTaskForm> | null, messageApi: MessageInstance) => {
   const { t } = useTranslation()
   const { addNewEntity } = useAgendaEntities()
-  const _initialData = initialData
+  const _initialData: CreateTaskForm = initialData
     ? {
         title: initialData.title ?? '',
         startDateVal: initialData.startDateVal ?? dayjs(),
         ...initialData,
+        priority: initialData.priority ?? 'medium',
       }
     : {
         title: '',
         startDateVal: dayjs(),
+        priority: 'medium',
       }
   const [formData, setFormData] = useState<CreateTaskForm>(_initialData)
 
@@ -77,6 +81,7 @@ const useCreate = (initialData: Partial<CreateTaskForm> | null, messageApi: Mess
         projectId: formData.projectId,
         bindObjectiveId: formData.bindObjectiveId,
         size: formData.size,
+        priority: formData.priority,
       },
     })
   }

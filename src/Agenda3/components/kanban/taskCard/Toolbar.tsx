@@ -14,6 +14,7 @@ import { DEFAULT_ESTIMATED_TIME } from '@/constants/agenda'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaTaskWithStart, AgendaTaskWithStartOrDeadline } from '@/types/task'
 
+import TaskPriorityBadge from '../../TaskPriorityBadge'
 import TaskSizeBadge from '../../TaskSizeBadge'
 import LogseqLogo from '../../icons/LogseqLogo'
 
@@ -81,7 +82,8 @@ const Toolbar = ({
           <LogseqLogo />
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex flex-wrap items-center gap-1">
+        <TaskPriorityBadge priority={task.priority} showEmpty />
         <TaskSizeBadge
           size={task.size}
           showEmpty

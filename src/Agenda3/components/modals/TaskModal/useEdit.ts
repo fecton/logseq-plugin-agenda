@@ -8,6 +8,7 @@ import { genDurationString, parseDurationString } from '@/Agenda3/helpers/block'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { AgendaEntity, AgendaEntityDeadline } from '@/types/entity'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
+import { TASK_PRIORITIES } from '@/types/taskPriority'
 import { TASK_SIZES } from '@/types/taskSize'
 
 import { genStart } from './useCreate'
@@ -32,6 +33,7 @@ const BaseFormSchema = object({
   projectId: optional(string()),
   bindObjectiveId: optional(string()),
   size: optional(picklist(TASK_SIZES)),
+  priority: optional(picklist(TASK_PRIORITIES)),
 })
 const StartFormSchema = object({
   ...BaseFormSchema.entries,
@@ -63,6 +65,7 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
     projectId: initialTask?.project?.id,
     bindObjectiveId: initialTask?.bindObjectiveId,
     size: initialTask?.size,
+    priority: initialTask?.priority,
   }
   const [formData, setFormData] = useState<EditTaskFormNoValidation>(initialFormData)
 

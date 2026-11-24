@@ -24,6 +24,7 @@ import type { TimeLog } from '@/types/task'
 import { getOS } from '@/util/util'
 
 import PageSelect from '../../forms/PageSelect'
+import TaskPrioritySelect from '../../forms/TaskPrioritySelect'
 import TaskSizeSelect from '../../forms/TaskSizeSelect'
 import LogseqLogo from '../../icons/LogseqLogo'
 import PageIcon from '../../icons/PageIcon'
@@ -64,6 +65,7 @@ const TaskModal = ({
   const [mode, setMode] = useState<'Normal' | 'Advanced'>('Normal')
   const titleInputRef = React.useRef<MentionsRef>(null)
   const sizeSelectId = React.useId()
+  const prioritySelectId = React.useId()
   const [titleTagSearchText, setTitleTagSearchText] = useState('')
   const settings = useAtomValue(settingsAtom)
   const { currentGraph } = useAtomValue(logseqAtom)
@@ -402,7 +404,7 @@ const TaskModal = ({
         </div>
         {/* ========= Estimated Time End ========= */}
 
-        <div className="my-2 flex items-center">
+        <div className="my-2 flex flex-wrap items-center gap-y-2">
           <label htmlFor={sizeSelectId} className="w-[160px] text-gray-400">
             {t('Size')}
           </label>
@@ -410,6 +412,15 @@ const TaskModal = ({
             id={sizeSelectId}
             value={formData.size}
             onChange={(size) => updateFormData({ size })}
+            disabled={editDisabled || saving}
+          />
+          <label htmlFor={prioritySelectId} className="ml-3 text-gray-400">
+            {t('Priority')}
+          </label>
+          <TaskPrioritySelect
+            id={prioritySelectId}
+            value={formData.priority}
+            onChange={(priority) => updateFormData({ priority })}
             disabled={editDisabled || saving}
           />
         </div>

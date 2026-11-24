@@ -48,6 +48,14 @@ If you want to contribute, please visit [contribution guide](./CONTRIBUTING.md)
 ![Timeline](./screenshots/timeline.png)
 ![Pomodoro](./screenshots/pomodoro.png) -->
 
+## Task priorities
+
+In Agenda 3, create or edit a task and choose **Priority** beside Size: **Highest, High, Medium, Low, or Lowest**. Each level has a colored arrow or equals icon. New tasks created in Agenda default to Medium; existing tasks remain unset, and the field can be cleared. Kanban and Time Box always show a priority indicator. Assigned priorities also appear in Calendar, Backlog, and Needs review.
+
+Kanban automatically sorts each day with unfinished tasks first and completed tasks last, then by priority within each group. Unset tasks share Medium's rank, and equal-priority tasks keep their existing order. Dragging still moves tasks between dates or into Time Box, but cannot override priority order within a day. Time Box and Calendar keep scheduled-time positioning.
+
+Priority is stored as `priority: high` in the existing `:AGENDA:` drawer. It is independent of Logseq's `[#A]`, `[#B]`, and `[#C]` markers. For recurring tasks, edit the drawer in Logseq. Priority changes preserve Size, dates, deadlines, notes, and other metadata.
+
 ## Task sizes
 
 In Agenda 3, create or edit a task and choose **Size**: **XXL, XL, L, M, or S**. Each size has a labeled bar icon, from one filled bar for S to five for XXL. Size badges appear on task cards, calendar entries, Time Box, Backlog, and Needs review. Use the selector's clear button to remove a size; existing tasks are unset by default.
