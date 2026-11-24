@@ -64,16 +64,16 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
       >
         <div className={cn('h-full', { 'opacity-60': isDone })}>
           <div
-            className={cn('relative flex items-center truncate', {
+            className={cn('flex items-center gap-1', {
               'line-through': isDone,
               'font-semibold': !isDone,
               'text-[10px]': isSmallHeight,
             })}
             title={showTitle}
           >
-            <TaskSizeBadge size={taskData?.size} className="mr-1" />
-            <span className="truncate">{showTitle}</span>
-            {isDone ? <IoIosCheckmarkCircle className="absolute right-0 text-white" /> : null}
+            <span className="min-w-0 flex-1 truncate">{showTitle}</span>
+            <TaskSizeBadge size={taskData?.size} showEmpty className="rounded bg-black/20 px-1 text-white" />
+            {isDone ? <IoIosCheckmarkCircle className="shrink-0 text-white" /> : null}
           </div>
           {isShowTimeText ? <div className="text-xs text-gray-100">{info.timeText}</div> : null}
         </div>

@@ -3,12 +3,20 @@ import { useTranslation } from 'react-i18next'
 import { parseTaskSize, TASK_SIZES, type TaskSize } from '@/types/taskSize'
 import { cn } from '@/util/util'
 
-export default function TaskSizeBadge({ size, className }: { size?: TaskSize; className?: string }) {
+export default function TaskSizeBadge({
+  size,
+  className,
+  showEmpty = false,
+}: {
+  size?: TaskSize
+  className?: string
+  showEmpty?: boolean
+}) {
   const { t } = useTranslation()
   const value = parseTaskSize(size)
-  if (!value) return null
-  const level = TASK_SIZES.length - TASK_SIZES.indexOf(value)
-  const label = `${t('Size')}: ${value}`
+  if (!value && !showEmpty) return null
+  const level = value ? TASK_SIZES.length - TASK_SIZES.indexOf(value) : 0
+  const label = `${t('Size')}: ${value ?? t('Not set')}`
   return (
     <span
       className={cn('inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] font-medium', className)}
@@ -28,7 +36,7 @@ export default function TaskSizeBadge({ size, className }: { size?: TaskSize; cl
           />
         ))}
       </svg>
-      {value}
+      {value ?? `${t('Size')}: —`}
     </span>
   )
 }

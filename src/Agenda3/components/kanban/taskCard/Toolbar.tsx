@@ -30,7 +30,7 @@ const Toolbar = ({
   const estimatedTime = task.estimatedTime ?? DEFAULT_ESTIMATED_TIME
 
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex flex-wrap items-center justify-between gap-1">
       <div className="flex items-center gap-1">
         {/* Check Marker */}
         {task.status === 'done' ? (
@@ -70,7 +70,6 @@ const Toolbar = ({
             <span>{getDaysBetween(dayjs(), task.deadline.value)}</span>
           </div>
         ) : null}
-        <TaskSizeBadge size={task.size} className="text-gray-500 dark:text-gray-300" />
         {/* Logseq icon */}
         <div
           className="cursor-pointer text-gray-300 opacity-0 transition-opacity group-hover/card:opacity-100 dark:text-gray-400"
@@ -82,12 +81,19 @@ const Toolbar = ({
           <LogseqLogo />
         </div>
       </div>
-      {task.start ? (
-        <div className="rounded bg-gray-100 px-1 py-0.5 text-[10px] text-gray-400 dark:bg-zinc-800">
-          {task.status === 'done' ? <span>{minutesToHHmm(task.actualTime ?? estimatedTime)} / </span> : null}
-          {minutesToHHmm(estimatedTime)}
-        </div>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-1">
+        <TaskSizeBadge
+          size={task.size}
+          showEmpty
+          className="rounded bg-gray-100 px-1 py-0.5 text-gray-600 dark:bg-zinc-800 dark:text-gray-200"
+        />
+        {task.start ? (
+          <div className="rounded bg-gray-100 px-1 py-0.5 text-[10px] text-gray-400 dark:bg-zinc-800">
+            {task.status === 'done' ? <span>{minutesToHHmm(task.actualTime ?? estimatedTime)} / </span> : null}
+            {minutesToHHmm(estimatedTime)}
+          </div>
+        ) : null}
+      </div>
     </div>
   )
 }
