@@ -62,13 +62,24 @@ test.each([...TASK_PRIORITIES, undefined])(
         <section aria-label="Month">
           <CalendarEvent info={{ ...info, view: { type: 'dayGridMonth' } } as EventContentArg} />
         </section>
-        <section aria-label="Week">
-          <CalendarEvent info={{ ...info, view: { type: 'timeGridWeek' } } as EventContentArg} />
-        </section>
+        {['timeGridDay', 'timeGridThreeDays', 'timeGridWorkWeek', 'timeGridWeek'].map((view) => (
+          <section key={view} aria-label={view}>
+            <CalendarEvent info={{ ...info, view: { type: view } } as EventContentArg} />
+          </section>
+        ))}
       </>,
     )
-    for (const board of ['Kanban', 'Time Box', 'Month', 'Week']) {
+    for (const board of [
+      'Kanban',
+      'Time Box',
+      'Month',
+      'timeGridDay',
+      'timeGridThreeDays',
+      'timeGridWorkWeek',
+      'timeGridWeek',
+    ]) {
       const region = within(screen.getByRole('region', { name: board }))
+      expect(region.getByText('Board task')).toBeVisible()
       expect(region.getByLabelText('Size: XL')).toBeVisible()
       const label = `Priority: ${priority ? TASK_PRIORITY_LABELS[priority] : 'Not set'}`
       if (priority || board === 'Kanban' || board === 'Time Box') {

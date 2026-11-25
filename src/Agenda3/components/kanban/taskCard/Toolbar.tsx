@@ -1,6 +1,7 @@
 import { Tooltip } from 'antd'
 import dayjs from 'dayjs'
 import { useAtomValue } from 'jotai'
+import { useTranslation } from 'react-i18next'
 import { CgSandClock } from 'react-icons/cg'
 import { GoGoal } from 'react-icons/go'
 import { IoIosCheckmarkCircle, IoIosCheckmarkCircleOutline } from 'react-icons/io'
@@ -13,7 +14,7 @@ import { getTaskTimeTotals } from '@/Agenda3/helpers/taskTime'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
 import { logseqAtom } from '@/Agenda3/models/logseq'
 import type { AgendaEntity } from '@/types/entity'
-import type { AgendaTaskWithStart, AgendaTaskWithStartOrDeadline } from '@/types/task'
+import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
 
 import TaskPriorityBadge from '../../TaskPriorityBadge'
 import TaskSizeBadge from '../../TaskSizeBadge'
@@ -24,12 +25,15 @@ const Toolbar = ({
   task,
   groupType,
   onClickMark,
+  compact = false,
 }: {
   task: AgendaTaskWithStartOrDeadline
   groupType: 'page' | 'filter'
+  compact?: boolean
   onClickMark: (event: React.MouseEvent, task: AgendaEntity, status: AgendaEntity['status']) => void
 }) => {
   const { currentGraph } = useAtomValue(logseqAtom)
+  const { t } = useTranslation()
   const displayedStart = task.sessionDay
     ? getTaskSessions(task).find((session) => session.start.format('YYYY-MM-DD') === task.sessionDay)?.start
     : task.start
@@ -38,17 +42,14 @@ const Toolbar = ({
     <div className="flex flex-wrap items-center justify-between gap-1">
       <div className="flex items-center gap-1">
         {/* Check Marker */}
-        {task.status === 'done' ? (
-          <IoIosCheckmarkCircle
-            className="cursor-pointer text-xl text-gray-300"
-            onClick={(e) => onClickMark(e, task, 'todo')}
-          />
-        ) : (
-          <IoIosCheckmarkCircleOutline
-            className="cursor-pointer text-xl text-gray-300"
-            onClick={(e) => onClickMark(e, task, 'done')}
-          />
-        )}
+        <button
+          type="button"
+          aria-label={t(task.status === 'done' ? 'Mark unfinished' : 'Mark done')}
+          className="text-xl text-gray-500 dark:text-gray-300"
+          onClick={(e) => onClickMark(e, task, task.status === 'done' ? 'todo' : 'done')}
+        >
+          {task.status === 'done' ? <IoIosCheckmarkCircle /> : <IoIosCheckmarkCircleOutline />}
+        </button>
         {/* Timer */}
         {task.allDay || !task.start ? null : (
           <span
@@ -94,7 +95,7 @@ const Toolbar = ({
             {minutesToHHmm(task.dayPlannedMinutes)}
           </span>
         ) : null}
-        <TaskPriorityBadge priority={task.priority} showEmpty />
+        <TaskPriorityBadge priority={task.priority} showEmpty compact={compact} />
         <TaskSizeBadge
           size={task.size}
           showEmpty

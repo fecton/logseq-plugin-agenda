@@ -56,6 +56,9 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
       )
       break
     case 'timeGridWeek':
+    case 'timeGridDay':
+    case 'timeGridThreeDays':
+    case 'timeGridWorkWeek':
       element = (
         <div className={cn('relative h-full cursor-pointer', { 'opacity-70': isDone, 'pr-6': isShowDeadline })}>
           <div

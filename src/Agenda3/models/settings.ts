@@ -1,5 +1,7 @@
 import { atom } from 'jotai'
 
+import type { DateView } from '@/Agenda3/helpers/dateViews'
+
 export type Language = 'en' | 'zh-CN'
 export type Settings = {
   isInitialized: boolean
@@ -14,6 +16,7 @@ export type Settings = {
     token?: string
   }
   viewOptions?: {
+    dateRange?: DateView
     hideCompleted?: boolean
     showFirstEventInCycleOnly?: boolean
     showTimeLog?: boolean

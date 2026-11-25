@@ -11,7 +11,6 @@ import { nextSessionDuration } from '@/Agenda3/helpers/taskSessions'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import { logseqAtom } from '@/Agenda3/models/logseq'
 import { settingsAtom } from '@/Agenda3/models/settings'
-import { DEFAULT_ESTIMATED_TIME } from '@/constants/agenda'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
 import { cn } from '@/util/util'
@@ -20,7 +19,7 @@ import Group from '../../Group'
 import TaskModal from '../../modals/TaskModal'
 import Toolbar from './Toolbar'
 
-const TaskCard = ({ task }: { task: AgendaTaskWithStartOrDeadline }) => {
+const TaskCard = ({ task, compact = false }: { task: AgendaTaskWithStartOrDeadline; compact?: boolean }) => {
   const currentGraph = useAtomValue(logseqAtom).currentGraph
   const settings = useAtomValue(settingsAtom)
   const groupType = settings.selectedFilters?.length ? 'filter' : 'page'
@@ -39,10 +38,14 @@ const TaskCard = ({ task }: { task: AgendaTaskWithStartOrDeadline }) => {
 
   const { updateEntity, deleteEntity } = useAgendaEntities()
 
-  const onClickTaskMark = (event: React.MouseEvent, task: AgendaEntity, status: AgendaEntity['status']) => {
-    if (task.rrule) return message.error('Please modify the status of the recurring task in logseq.')
-    updateEntity({ type: 'task-status', id: task.id, data: status })
+  const onClickTaskMark = async (event: React.MouseEvent, task: AgendaEntity, status: AgendaEntity['status']) => {
     event.stopPropagation()
+    if (task.rrule) return message.error('Please modify the status of the recurring task in logseq.')
+    try {
+      await updateEntity({ type: 'task-status', id: task.id, data: status })
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Could not update task. Please try again.')
+    }
   }
   const onDeleteTask = async (taskId: string) => {
     deleteEntity(taskId)
@@ -66,6 +69,7 @@ const TaskCard = ({ task }: { task: AgendaTaskWithStartOrDeadline }) => {
         'group/card cursor-pointer whitespace-pre-wrap rounded-md bg-white p-2 hover:shadow dark:bg-zinc-700',
         {
           'bg-[#edeef0] opacity-80 dark:bg-[#2f2f33]': task.status === 'done',
+          'p-1.5 text-xs': compact,
           // 循环任务及多天任务不能拖拽
           'droppable-task-element': !editDisabled && !isMultipleDays && !noStart,
         },
@@ -112,24 +116,34 @@ const TaskCard = ({ task }: { task: AgendaTaskWithStartOrDeadline }) => {
         }}
       >
         <div
+          role="button"
+          tabIndex={0}
+          aria-label={task.title}
+          onKeyDown={(event) => {
+            if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+              event.preventDefault()
+              setEditTaskModal({ open: true, task })
+            }
+          }}
           onClick={(e) => {
             onClickTask(e, task)
           }}
         >
           {/* ========= Toolbar ========= */}
-          <Toolbar task={task} groupType={groupType} onClickMark={onClickTaskMark} />
+          <Toolbar task={task} groupType={groupType} onClickMark={onClickTaskMark} compact={compact} />
 
           {/* ========= Title ========= */}
           <div
             className={cn('my-0.5 select-none break-words text-gray-600 dark:text-gray-100', {
               'line-through': task.status === 'done',
+              'line-clamp-2': compact,
             })}
           >
             {task.showTitle}
           </div>
 
           {/* ========= Group(page or filter) Name ========= */}
-          <Group task={task} type={groupType} />
+          {!compact && <Group task={task} type={groupType} />}
         </div>
       </Dropdown>
       {/* ========== Edit Task Modal ========== */}

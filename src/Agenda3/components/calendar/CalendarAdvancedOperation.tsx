@@ -3,28 +3,19 @@ import React, { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { IoMdCheckmark } from 'react-icons/io'
 
+import { DATE_VIEWS, DATE_VIEW_LABELS, type DateView } from '@/Agenda3/helpers/dateViews'
 import useSettings from '@/Agenda3/hooks/useSettings'
 import { cn } from '@/util/util'
 
-export const CALENDAR_VIEWS = {
-  dayGridMonth: 'dayGridMonth',
-  timeGridWeek: 'timeGridWeek',
-} as const
-export type CalendarView = keyof typeof CALENDAR_VIEWS
-
-const CalendarOperation = ({ value, onChange }: { value: CalendarView; onChange: (view: CalendarView) => void }) => {
+const CalendarOperation = ({ value, onChange }: { value: DateView; onChange: (view: DateView) => void }) => {
   const { t } = useTranslation()
 
-  const CALENDAR_OPTIONS = [
-    { value: CALENDAR_VIEWS.dayGridMonth, label: t('Month') },
-    // { value: 'dayGridWeek', label: '2 Weeks' },
-    { value: CALENDAR_VIEWS.timeGridWeek, label: t('Week') },
-  ]
+  const CALENDAR_OPTIONS = DATE_VIEWS.map((view) => ({ value: view, label: t(DATE_VIEW_LABELS[view]) }))
 
   const { settings, setSettings } = useSettings()
   const [open, setOpen] = useState(false)
 
-  const onClickItem = (view: CalendarView) => {
+  const onClickItem = (view: DateView) => {
     onChange(view)
     setOpen(false)
   }
@@ -38,14 +29,18 @@ const CalendarOperation = ({ value, onChange }: { value: CalendarView; onChange:
       dropdownRender={() => {
         return (
           <div className="rounded-md bg-white shadow-lg dark:bg-[#333]">
-            <div className="flex flex-col gap-1 border-b px-2 py-2">
+            <div role="menu" aria-label={t('Date range')} className="flex flex-col gap-1 border-b px-2 py-2">
               {CALENDAR_OPTIONS.map((view) => {
                 const isSelected = value === view.value
                 return (
-                  <div
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={isSelected}
                     key={view.value}
                     className={cn(
-                      'flex min-w-[120px] cursor-pointer items-center justify-between gap-2 rounded px-2 py-1 hover:bg-gray-300 hover:dark:bg-[#444]',
+                      `flex min-w-[120px] cursor-pointer items-center justify-between gap-2 rounded px-2 py-1 hover:bg-gray-300
+                      hover:dark:bg-[#444]`,
                       {
                         'bg-gray-200 dark:bg-[#555]': isSelected,
                       },
@@ -54,7 +49,7 @@ const CalendarOperation = ({ value, onChange }: { value: CalendarView; onChange:
                   >
                     {view.label}
                     <IoMdCheckmark className={cn('invisible', { visible: isSelected })} />
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -79,7 +74,9 @@ const CalendarOperation = ({ value, onChange }: { value: CalendarView; onChange:
         )
       }}
     >
-      <Button className="!bg-transparent">{CALENDAR_OPTIONS.find((view) => view.value === value)?.label}</Button>
+      <Button aria-label={t('Date range')} className="!bg-transparent">
+        {CALENDAR_OPTIONS.find((view) => view.value === value)?.label}
+      </Button>
     </Dropdown>
   )
 }

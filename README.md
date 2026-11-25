@@ -48,6 +48,14 @@ If you want to contribute, please visit [contribution guide](./CONTRIBUTING.md)
 ![Timeline](./screenshots/timeline.png)
 ![Pomodoro](./screenshots/pomodoro.png) -->
 
+## Shared date views
+
+Tasks and Calendar share **1 day**, **3 days**, **5 days**, **1 week**, and **1 month** views. The default is the five-day Monday–Friday workweek; Agenda remembers your range preference. Switching modes or hiding Agenda keeps the selected date. Reloading starts on today with your saved range.
+
+Use **Previous**, **Today**, and **Next** in either mode. Three days starts on the selected date; workweek always shows its Monday–Friday, even when today is a weekend. Full weeks and month grids follow the configured week start. Tasks month shows three compact cards per day; **+N more** opens the full, scrollable day list. Cards in that list support the same editing and dragging as the main board. Time Box remains independently navigable.
+
+Keyboard shortcuts: **T** switches Tasks/Calendar, **W** toggles Month/Week (selecting Month from other ranges), and **[[** / **]]** navigate periods. Shortcuts are inactive while typing or using a modal. Changing views never edits task blocks.
+
 ## Planned sessions
 
 One task can have several timed sessions. Dragging its Kanban card into Time Box or Calendar **adds a session**; dragging or resizing an existing box changes **only that session**. The task editor's **Sessions** section lets you add, change, or remove individual sessions. Removing a session does not delete the task.

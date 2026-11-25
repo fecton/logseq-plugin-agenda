@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within, waitFor } from '@testing-library/react'
+import { message } from 'antd'
 import dayjs from 'dayjs'
 import type { ReactNode } from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -8,13 +9,19 @@ import type { AgendaTaskWithStart } from '@/types/task'
 
 import Column from './Column'
 
-const { updateEntity, drag } = vi.hoisted(() => ({
+const { updateEntity, drag, destroyDraggable } = vi.hoisted(() => ({
   updateEntity: vi.fn(),
+  destroyDraggable: vi.fn(),
   drag: { outside: false, day: undefined as string | undefined },
 }))
 vi.mock('@/Agenda3/hooks/useAgendaEntities', () => ({ default: () => ({ updateEntity }) }))
 vi.mock('@/Agenda3/helpers/umami', () => ({ track: vi.fn() }))
-vi.mock('@fullcalendar/interaction', () => ({ ThirdPartyDraggable: vi.fn() }))
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, values = {}) => key.replace(/{{(\w+)}}/g, (_, name) => String(values[name])),
+  }),
+}))
+vi.mock('@fullcalendar/interaction', () => ({ ThirdPartyDraggable: vi.fn(() => ({ destroy: destroyDraggable })) }))
 vi.mock('./ColumnTitle', () => ({ default: () => null }))
 vi.mock('./AddTaskCard', () => ({
   default: ({ estimatedTime, actualTime }) => (
@@ -111,6 +118,20 @@ test('renders priority order, reorders refreshed tasks, and retains cross-day sc
   expect(screen.getAllByRole('article').map((el) => el.textContent)).toEqual(['low', 'high', 'unset', 'medium', 'done'])
 })
 
+test('a month cell underneath the sidebar does not also move a card dropped into Time Box', () => {
+  const rect = vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockReturnValue({ left: 0, top: 0, right: 2000, bottom: 2000 } as DOMRect)
+  const previous = document.elementFromPoint
+  document.elementFromPoint = vi.fn(() => document.body)
+  render(<Column compact day={dayjs('2026-11-29')} tasks={[]} allKanbanItems={[]} />)
+  drag.outside = true
+  fireEvent.click(screen.getByRole('button', { name: 'Move to this day' }))
+  expect(updateEntity).not.toHaveBeenCalled()
+  rect.mockRestore()
+  document.elementFromPoint = previous
+})
+
 test('daily totals include logs on days without cards and follow accounting task refreshes', () => {
   const task: AgendaEntity = {
     id: 'log-only',
@@ -131,4 +152,34 @@ test('daily totals include logs on days without cards and follow accounting task
   expect(screen.queryByRole('article')).toBeNull()
   rerender(<Column day={dayjs('2026-11-25')} tasks={[]} allKanbanItems={[]} accountingTasks={[]} />)
   expect(screen.getByTestId('daily-totals')).toHaveTextContent('unset:0')
+})
+
+test('month cells show the first three priorities and open the complete sorted day in a popover', async () => {
+  const tasks = ['low', 'medium', 'high', 'blocker', 'lowest'].map(
+    (priority) =>
+      ({ id: priority, priority, status: 'todo', allDay: true, start: dayjs('2026-11-25') } as AgendaTaskWithStart),
+  )
+  const view = render(<Column compact day={dayjs('2026-11-25')} tasks={tasks} allKanbanItems={tasks} />)
+  expect(screen.getAllByRole('article').map((el) => el.textContent)).toEqual(['blocker', 'high', 'medium'])
+  fireEvent.click(screen.getByRole('button', { name: '+2 more' }))
+  const popover = await screen.findByRole('region', { name: 'All tasks for 2026-11-25' })
+  expect(
+    within(popover)
+      .getAllByRole('article')
+      .map((el) => el.textContent),
+  ).toEqual(['blocker', 'high', 'medium', 'low', 'lowest'])
+  view.unmount()
+  expect(destroyDraggable).toHaveBeenCalledTimes(2)
+})
+
+test('failed drops keep the existing cards and report the error', async () => {
+  const error = vi.spyOn(message, 'error').mockImplementation(() => undefined as never)
+  updateEntity.mockRejectedValueOnce(new Error('Save failed'))
+  const task = { id: 'medium', start: dayjs('2026-11-24T13:00'), allDay: false, status: 'todo' } as AgendaTaskWithStart
+  render(<Column day={dayjs('2026-11-25')} tasks={[task]} allKanbanItems={[task]} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Move to this day' }))
+  await waitFor(() => expect(error).toHaveBeenCalledWith('Save failed'))
+  expect(screen.getByRole('article')).toHaveTextContent('medium')
+  expect(updateEntity).toHaveBeenCalledTimes(1)
+  error.mockRestore()
 })

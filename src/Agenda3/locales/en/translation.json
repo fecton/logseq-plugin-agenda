@@ -94,5 +94,16 @@
   "Actual": "Actual",
   "Time boxes": "Time boxes",
   "Manual logs": "Manual logs",
-  "Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.": "Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box."
+  "Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.": "Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.",
+  "1 day": "1 day",
+  "3 days": "3 days",
+  "5 days": "5 days",
+  "1 week": "1 week",
+  "1 month": "1 month",
+  "Date range": "Date range",
+  "Previous": "Previous",
+  "Next": "Next",
+  "+{{count}} more": "+{{count}} more",
+  "All tasks for {{date}}": "All tasks for {{date}}",
+  "Mark unfinished": "Mark unfinished"
 }

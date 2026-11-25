@@ -2,33 +2,32 @@ import { LeftOutlined, RightOutlined } from '@ant-design/icons'
 import { Button, Segmented } from 'antd'
 import dayjs from 'dayjs'
 import { useAtom, useAtomValue } from 'jotai'
-import { useRef, useState, useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FiSettings, FiXCircle } from 'react-icons/fi'
 import { LuCalendarDays, LuKanbanSquare } from 'react-icons/lu'
 
+import { navigateDateView, type DateView } from '@/Agenda3/helpers/dateViews'
 import { track } from '@/Agenda3/helpers/umami'
+import useSettings from '@/Agenda3/hooks/useSettings'
 import { type App, appAtom } from '@/Agenda3/models/app'
+import { dateViewAtom } from '@/Agenda3/models/dateView'
 import { needsReviewAtom } from '@/Agenda3/models/entities/needsReview'
-import { settingsAtom } from '@/Agenda3/models/settings'
 import { cn } from '@/util/util'
 
 import Filter from './Filter'
 import UploadIcs from './UploadIcs'
-import Calendar, { type CalendarHandle } from './calendar/Calendar'
-import CalendarOperation, { CALENDAR_VIEWS, type CalendarView } from './calendar/CalendarAdvancedOperation'
-import KanBan, { type KanBanHandle } from './kanban/KanBan'
+import Calendar from './calendar/Calendar'
+import CalendarOperation from './calendar/CalendarAdvancedOperation'
+import KanBan from './kanban/KanBan'
 import SettingsModal from './modals/SettingsModal'
 
 const MultipleView = ({ className }: { className?: string }) => {
   const { t } = useTranslation()
-  const kanbanRef = useRef<KanBanHandle>(null)
-  const calendarRef = useRef<CalendarHandle>(null)
   const [app, setApp] = useAtom(appAtom)
-  const settings = useAtomValue(settingsAtom)
+  const { settings, setSettings } = useSettings()
+  const dateView = useAtomValue(dateViewAtom)
   const { count: reviewCount } = useAtomValue(needsReviewAtom)
-
-  const [calendarTitle, setCalendarTitle] = useState('')
 
   const VIEWS = [
     {
@@ -49,132 +48,114 @@ const MultipleView = ({ className }: { className?: string }) => {
     },
   ]
 
+  const navigate = useCallback(
+    (direction: -1 | 1) => {
+      setApp((state) => ({ ...state, anchorDate: navigateDateView(dateView.view, state.anchorDate, direction) }))
+    },
+    [dateView.view, setApp],
+  )
   const onClickToday = () => {
-    if (app.view === 'calendar') {
-      calendarRef.current?.navToday()
-    } else {
-      kanbanRef.current?.scrollToToday()
-    }
+    setApp((state) => ({ ...state, anchorDate: dayjs().format('YYYY-MM-DD') }))
     track('Today Button', { view: app.view })
   }
-  const onClickAppViewChange = (view) => {
-    const _view = view as App['view']
-    setApp((_app) => {
-      return { ..._app, view: _view }
-    })
-    track('View Change', { view: view })
-  }
-  const onClickGoal = () => {
-    const type = calendarRef.current?.getView() === 'dayGridMonth' ? 'month' : 'week'
-    const date = calendarRef.current?.getDate()
-    const day = dayjs(date)
-    setApp((_app) => ({
-      ..._app,
-      sidebarType: 'objective',
-      objectivePeriod: {
-        type,
-        number: type === 'month' ? day.month() + 1 : day.isoWeek(),
-        year: day.year(),
-      },
-    }))
-  }
-
-  const setCalendarView = (view: CalendarView) => {
-    calendarRef.current?.changeView(view as CalendarView)
-    setApp((_app) => ({ ..._app, calendarView: view }))
-    track('Calendar View Change', { calendarView: view })
-  }
-
-  const togCalendarView = () => {
-    const view =
-      app.calendarView === CALENDAR_VIEWS.dayGridMonth ? CALENDAR_VIEWS.timeGridWeek : CALENDAR_VIEWS.dayGridMonth
-    setCalendarView(view)
-  }
-
+  const setDateView = useCallback(
+    (view: DateView) => {
+      setSettings('viewOptions.dateRange', view)
+      track('Date Range Change', { range: view })
+    },
+    [setSettings],
+  )
+  const onClickAppViewChange = useCallback(
+    (view: App['view']) => {
+      const _view = view as App['view']
+      setApp((_app) => {
+        return { ..._app, view: _view }
+      })
+      track('View Change', { view: view })
+    },
+    [setApp],
+  )
   useEffect(() => {
     let lastKeyDownTime = 0
     let lastKey = ''
-    const doubleClickThreshold = 500 // 500 milliseconds
-
-    function handleKeyDown(event) {
-      // Get the currently focused element
-      const activeElement = document.activeElement
-
-      // If the focused element is an input or textarea, ignore the keydown event
-      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) return
-
-      const calendarApi = calendarRef.current
-
-      const currentTime = new Date().getTime()
-
-      // Handle double-tap [[ or ]]
-      if (currentTime - lastKeyDownTime <= doubleClickThreshold && lastKey === event.code) {
-        // [[ : go to the previous month
-        if (event.code === 'BracketLeft') calendarApi?.prev()
-        // ]] : go to the next month
-        if (event.code === 'BracketRight') calendarApi?.next()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const active = document.activeElement as HTMLElement | null
+      const dialogOpen = Array.from(document.querySelectorAll('[role="dialog"]')).some((dialog) => {
+        let element: Element | null = dialog
+        while (element) {
+          if (element.getAttribute('aria-hidden') === 'true' || getComputedStyle(element).display === 'none')
+            return false
+          element = element.parentElement
+        }
+        return true
+      })
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        dialogOpen ||
+        active?.closest('input, textarea, select, [contenteditable="true"], [role="combobox"]')
+      )
+        return
+      const now = Date.now()
+      if (
+        (event.code === 'BracketLeft' || event.code === 'BracketRight') &&
+        lastKey === event.code &&
+        now - lastKeyDownTime <= 500
+      ) {
+        event.preventDefault()
+        navigate(event.code === 'BracketLeft' ? -1 : 1)
+        lastKey = ''
+        return
       }
-
-      // Handle other keystrokes
-      if (event.code === 'KeyW') togCalendarView()
-
+      if (event.code === 'KeyW') {
+        event.preventDefault()
+        setDateView(dateView.view === 'month' ? 'week' : 'month')
+      }
       if (event.code === 'KeyT') {
-        const view = app.view === 'calendar' ? 'tasks' : 'calendar'
-        onClickAppViewChange(view)
-        // TODO UI: toggle the state of Calendar-Tasks slider accordingly
+        event.preventDefault()
+        onClickAppViewChange(app.view === 'calendar' ? 'tasks' : 'calendar')
       }
-
       lastKey = event.code
-      lastKeyDownTime = currentTime
+      lastKeyDownTime = now
     }
-
     document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [app.calendarView, app.view, setApp])
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [dateView.view, app.view, navigate, setDateView, onClickAppViewChange])
 
   return (
     <div className={cn('relative z-0 flex w-0 flex-1 flex-col py-1 pl-2', className)}>
       {/* ========= View Actions ========= */}
-      <div className="flex w-full items-center justify-between border-b py-1 pr-2">
+      <div className="flex w-full flex-wrap items-center justify-between gap-2 border-b py-1 pr-2">
         <div className="flex items-center">
-          {app.view === 'calendar' ? (
-            <div className="mr-1">
-              <Button
-                icon={<LeftOutlined />}
-                shape="circle"
-                className="mr-1 !bg-transparent"
-                onClick={() => {
-                  calendarRef.current?.prev()
-                  track('Calendar Previous Button')
-                }}
-              />
-              <Button
-                icon={<RightOutlined />}
-                shape="circle"
-                className="!bg-transparent"
-                onClick={() => {
-                  calendarRef.current?.next()
-                  track('Calendar Next Button')
-                }}
-              />
-            </div>
-          ) : null}
+          <div className="mr-1 flex shrink-0 gap-1">
+            <Button
+              aria-label={t('Previous')}
+              title={t('Previous')}
+              icon={<LeftOutlined />}
+              shape="circle"
+              className="!bg-transparent"
+              onClick={() => navigate(-1)}
+            />
+            <Button
+              aria-label={t('Next')}
+              title={t('Next')}
+              icon={<RightOutlined />}
+              shape="circle"
+              className="!bg-transparent"
+              onClick={() => navigate(1)}
+            />
+          </div>
           <Button className="!bg-transparent" shape="round" onClick={onClickToday}>
             {t('Today')}
           </Button>
-          {app.view === 'calendar' ? (
-            <h1 className="ml-3 flex items-center gap-1 text-xl font-medium">
-              {calendarTitle}
-              {/* <div className="cursor-pointer text-gray-400 hover:text-gray-700" onClick={onClickGoal}>
-                <GoGoal />
-              </div> */}
-            </h1>
-          ) : null}
+          <h1 className="ml-3 text-lg font-medium" aria-live="polite">
+            {dateView.title}
+          </h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             type={app.sidebarType === 'review' && !app.rightSidebarFolded ? 'primary' : 'default'}
             onClick={() =>
@@ -183,21 +164,12 @@ const MultipleView = ({ className }: { className?: string }) => {
           >
             {t('Needs review')} ({reviewCount})
           </Button>
-          {app.view === 'calendar' ? (
-            <CalendarOperation
-              value={app.calendarView}
-              onChange={(view) => {
-                calendarRef.current?.changeView(view as CalendarView)
-                setApp((_app) => ({ ..._app, calendarView: view }))
-                track('Calendar View Change', { calendarView: view })
-              }}
-            />
-          ) : null}
+          <CalendarOperation value={dateView.view} onChange={setDateView} />
           <Segmented
             value={app.view}
             className="!bg-gray-200 dark:!bg-zinc-700"
             options={VIEWS}
-            onChange={onClickAppViewChange}
+            onChange={(view) => onClickAppViewChange(view as App['view'])}
           />
           {settings.filters?.length ? <Filter /> : null}
           {settings.ics?.repo && settings.ics?.token ? <UploadIcs className="cursor-pointer text-lg" /> : null}
@@ -209,13 +181,7 @@ const MultipleView = ({ className }: { className?: string }) => {
           ) : null}
         </div>
       </div>
-      <div className="h-0 flex-1">
-        {app.view === 'tasks' ? (
-          <KanBan ref={kanbanRef} />
-        ) : (
-          <Calendar ref={calendarRef} onCalendarTitleChange={setCalendarTitle} />
-        )}
-      </div>
+      <div className="h-0 flex-1">{app.view === 'tasks' ? <KanBan /> : <Calendar />}</div>
     </div>
   )
 }

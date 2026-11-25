@@ -94,5 +94,16 @@
   "Actual": "实际",
   "Time boxes": "时间块",
   "Manual logs": "手动日志",
-  "Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.": "实际时间包含未来时间块的完整时长。手动日志会额外计入，即使与时间块重叠。"
+  "Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.": "实际时间包含未来时间块的完整时长。手动日志会额外计入，即使与时间块重叠。",
+  "1 day": "1 天",
+  "3 days": "3 天",
+  "5 days": "5 天",
+  "1 week": "1 周",
+  "1 month": "1 个月",
+  "Date range": "日期范围",
+  "Previous": "上一段",
+  "Next": "下一段",
+  "+{{count}} more": "+{{count}} 项",
+  "All tasks for {{date}}": "{{date}} 的所有任务",
+  "Mark unfinished": "标记为未完成"
 }

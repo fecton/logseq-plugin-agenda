@@ -1,20 +1,22 @@
-import type { DateSelectArg, EventClickArg, EventDropArg } from '@fullcalendar/core'
+import type { DateSelectArg, EventClickArg } from '@fullcalendar/core'
 import dayGridPlugin from '@fullcalendar/daygrid'
-import interactionPlugin, { type EventReceiveArg, type EventResizeDoneArg } from '@fullcalendar/interaction'
+import interactionPlugin from '@fullcalendar/interaction'
 import FullCalendar from '@fullcalendar/react'
 import rrulePlugin from '@fullcalendar/rrule'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import clsx from 'clsx'
 import dayjs from 'dayjs'
 import { useAtomValue } from 'jotai'
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
 import { useTheme } from '@/Agenda3/components/ThemeProvider'
+import { CALENDAR_VIEW_IDS } from '@/Agenda3/helpers/dateViews'
 import { transformAgendaTaskToCalendarEvent } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
 import { track } from '@/Agenda3/helpers/umami'
 import useSessionScheduling, { captureSessionLeave } from '@/Agenda3/hooks/useSessionScheduling'
 import { appAtom } from '@/Agenda3/models/app'
+import { dateViewAtom } from '@/Agenda3/models/dateView'
 import { calendarTasksAtom } from '@/Agenda3/models/entities/tasks'
 import { logseqAtom } from '@/Agenda3/models/logseq'
 import { settingsAtom } from '@/Agenda3/models/settings'
@@ -24,7 +26,6 @@ import { cn } from '@/util/util'
 
 import TaskModal from '../modals/TaskModal'
 import { type CreateTaskForm } from '../modals/TaskModal/useCreate'
-import { type CalendarView } from './CalendarAdvancedOperation'
 import TheCalendarEvent from './TheCalendarEvent'
 import WeekNumber from './WeekNumber'
 import s from './calendar.module.less'
@@ -34,9 +35,7 @@ const FULL_CALENDAR_24HOUR_FORMAT = {
   minute: '2-digit',
   hour12: false,
 } as const
-type CalendarProps = { onCalendarTitleChange: (title: string) => void }
-const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
-  // const [currentView, setCurrentView] = useState<CalendarView>('dayGridMonth')
+const Calendar = () => {
   const calendarRef = useRef<FullCalendar>(null)
   const { currentTheme: theme } = useTheme()
   const app = useAtomValue(appAtom)
@@ -44,7 +43,10 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
   const tasksWithStartOrDeadline = useAtomValue(calendarTasksAtom)
   const settings = useAtomValue(settingsAtom)
   const { currentGraph } = useAtomValue(logseqAtom)
-  const startingDay = settings.general?.startOfWeek
+  const dateView = useAtomValue(dateViewAtom)
+  const calendarView = CALENDAR_VIEW_IDS[dateView.view]
+  const displayStart = dateView.start.format('YYYY-MM-DD')
+  const startingDay = dateView.view === 'workWeek' ? 1 : dateView.firstDay
   const groupType = settings.selectedFilters?.length ? 'filter' : 'page'
   const showTasks = tasksWithStartOrDeadline?.filter((task) =>
     settings.viewOptions?.hideCompleted ? task.status === 'todo' : true,
@@ -110,36 +112,17 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
     })
   }
 
-  useImperativeHandle(ref, () => {
-    const calendarApi = calendarRef.current?.getApi()
-    return {
-      next: () => {
-        calendarApi?.next()
-      },
-      prev: () => {
-        calendarApi?.prev()
-      },
-      changeView: (view: CalendarView) => {
-        calendarApi?.changeView(view)
-      },
-      getView: () => {
-        return calendarApi?.view.type
-      },
-      getDate: () => {
-        return calendarApi?.getDate()
-      },
-      navToday: () => {
-        calendarApi?.today()
-      },
-    }
-  })
+  useEffect(() => {
+    calendarRef.current?.getApi().changeView(calendarView, displayStart)
+  }, [calendarView, displayStart, startingDay])
 
   useEffect(() => {
     if (calendarRef.current) {
       const calendarApi = calendarRef.current?.getApi()
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         calendarApi.updateSize()
-      }, 300) // The duration here needs to be longer than the sidebar animation duration.
+      }, 300) // Wait for the sidebar animation.
+      return () => clearTimeout(timer)
     }
   }, [app.rightSidebarFolded])
 
@@ -185,14 +168,12 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
         //   center: 'title',
         //   right: 'dayGridMonth,timeGridWeek',
         // }}
-        initialView={app.calendarView}
+        initialView={calendarView}
+        initialDate={displayStart}
         dayHeaderClassNames="!border-x-0"
         plugins={[timeGridPlugin, interactionPlugin, dayGridPlugin, rrulePlugin]}
         eventTimeFormat={FULL_CALENDAR_24HOUR_FORMAT}
         slotLabelFormat={FULL_CALENDAR_24HOUR_FORMAT}
-        datesSet={(info) => {
-          onCalendarTitleChange(info.view.title)
-        }}
         // drag external kanban element to calendar
         eventReceive={(info) => {
           void onEventScheduleUpdate(info, true)
@@ -226,8 +207,14 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
         }}
         eventContent={(info) => <TheCalendarEvent info={info} />}
         views={{
-          timeGridWeek: {
-            // dayMaxEvents: true,
+          timeGridThreeDays: {
+            type: 'timeGrid',
+            duration: { days: 3 },
+            dateAlignment: 'day',
+            dateIncrement: { days: 3 },
+          },
+          timeGridWorkWeek: { type: 'timeGrid', duration: { weeks: 1 }, firstDay: 1, hiddenDays: [0, 6] },
+          timeGrid: {
             nowIndicator: true,
             scrollTime: dayjs().subtract(1, 'hour').format('HH:mm:ss'),
             dayHeaderContent: (date) => {
@@ -287,12 +274,4 @@ const Calendar = ({ onCalendarTitleChange }: CalendarProps, ref) => {
   )
 }
 
-export type CalendarHandle = {
-  prev: () => void
-  next: () => void
-  getView: () => CalendarView
-  getDate: () => Date
-  changeView: (view: CalendarView) => void
-  navToday: () => void
-}
-export default forwardRef<CalendarHandle, CalendarProps>(Calendar)
+export default Calendar

@@ -371,16 +371,22 @@ export const separateTasksInDay = (
  */
 export const transformTasksToKanbanTasks = (
   tasks: AgendaTaskWithStartOrDeadline[],
-  options: { showFirstEventInCycleOnly?: boolean } = {},
+  options: { showFirstEventInCycleOnly?: boolean; range?: { start: Dayjs; end: Dayjs } } = {},
 ): KanBanItem[] => {
   const { showFirstEventInCycleOnly = false } = options
   const today = dayjs()
+  const range = options.range
+  const inRange = (date: Dayjs) => !range || (!date.isBefore(range.start, 'day') && date.isBefore(range.end, 'day'))
   return tasks
     .map((task) => {
       const { allDay, end, start } = task
       const sessions = getTaskSessions(task)
       if (sessions.length) {
-        const days = [...new Set(sessions.map((session) => session.start.format('YYYY-MM-DD')))]
+        const days = [
+          ...new Set(
+            sessions.filter((session) => inRange(session.start)).map((session) => session.start.format('YYYY-MM-DD')),
+          ),
+        ]
         return days.map((sessionDay) => {
           const daily = sessions.filter((session) => session.start.format('YYYY-MM-DD') === sessionDay)
           return {
@@ -394,7 +400,9 @@ export const transformTasksToKanbanTasks = (
 
       // splitting multi-days task into single-day tasks
       if (allDay && end && start) {
-        const days = genDays(start, end)
+        const first = range && start.isBefore(range.start, 'day') ? range.start : start
+        const last = range && !end.isBefore(range.end, 'day') ? range.end.subtract(1, 'day') : end
+        const days = first.isAfter(last, 'day') ? [] : genDays(first, last)
         return days.map((day) => {
           const isPast = day.isBefore(today, 'day')
           const isEndDay = day.isSame(end, 'day')
@@ -411,8 +419,12 @@ export const transformTasksToKanbanTasks = (
       // show recurring task
       if (task.rrule) {
         const rruleInstance = getRRuleInstance(showFirstEventInCycleOnly ? { ...task.rrule, count: 1 } : task.rrule)
-        const [startDay, endDay] = getRecentDaysRange()
-        const dates = rruleInstance.between(startDay.toDate(), endDay.add(1, 'day').toDate())
+        const [recentStart, recentEnd] = getRecentDaysRange()
+        const startDay = range?.start ?? recentStart.startOf('day')
+        const endDay = range?.end ?? recentEnd.add(1, 'day').startOf('day')
+        const dates = rruleInstance
+          .between(startDay.toDate(), endDay.toDate(), true)
+          .filter((date) => dayjs(date).isBefore(endDay))
         return dates.map((date) => {
           return {
             ...task,
@@ -421,7 +433,8 @@ export const transformTasksToKanbanTasks = (
         })
       }
 
-      return task
+      const date = task.start ?? task.deadline?.value
+      return date && inRange(date) ? task : []
       // return {
       //   ...task,
       //   filtered: task.recurringPast || Boolean(task.rrule),

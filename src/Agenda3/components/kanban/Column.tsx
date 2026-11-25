@@ -1,184 +1,131 @@
-import { ThirdPartyDraggable } from '@fullcalendar/interaction'
-import { Progress, message } from 'antd'
+import { Popover, Progress } from 'antd'
 import dayjs, { type Dayjs } from 'dayjs'
-import { useAtomValue } from 'jotai'
-import { useEffect, useImperativeHandle, useRef } from 'react'
-import React from 'react'
-import { ReactSortable } from 'react-sortablejs'
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
-import { sortKanbanTasks } from '@/Agenda3/helpers/taskPriority'
 import { getDailyTimeTotals } from '@/Agenda3/helpers/taskTime'
-import { track } from '@/Agenda3/helpers/umami'
-import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
-import { appAtom } from '@/Agenda3/models/app'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
-import { cn, replaceDateInfo } from '@/util/util'
+import { cn } from '@/util/util'
 
 import AddTaskCard from './AddTaskCard'
 import ColumnTitle from './ColumnTitle'
-import type { KanBanItem } from './KanBan'
-import TaskCard from './taskCard/TaskCard'
+import TaskDayList from './TaskDayList'
 
 export type ColumnProps = {
   day: Dayjs
   tasks: AgendaTaskWithStartOrDeadline[]
-  allKanbanItems: KanBanItem[]
+  allKanbanItems: AgendaTaskWithStartOrDeadline[]
   accountingTasks?: AgendaEntity[]
+  compact?: boolean
+  muted?: boolean
 }
-const Column = ({ day, tasks, allKanbanItems, accountingTasks = allKanbanItems }: ColumnProps, ref) => {
-  const columnContainerRef = useRef<HTMLDivElement>(null)
-  // bind draggable
-  const hadBindDropRef = useRef(false)
-
-  const app = useAtomValue(appAtom)
-
-  const today = dayjs()
-  const dateStr = day.format('MM-DD ddd')
-
-  const isToday = day.isSame(today, 'day')
-  const doneTasks = tasks.filter((task) => task.status === 'done')
-  const undoneTasks = tasks.filter((task) => task.status !== 'done')
-  const _dayTasks = sortKanbanTasks(tasks)
-  const { estimatedMinutes: estimatedTime, actualMinutes: actualTime } = getDailyTimeTotals(
-    accountingTasks,
-    day.format('YYYY-MM-DD'),
-  )
-
-  const { updateEntity } = useAgendaEntities()
-
-  const onAddTaskByDrag = async (sortableEvent) => {
-    console.log('[faiz:] === kanban onAdd', sortableEvent)
-    // Sortable can report its last hovered column when FullCalendar receives the drop.
-    const pointer = sortableEvent.originalEvent
-    const bounds = columnContainerRef.current?.getBoundingClientRect()
-    if (
-      pointer &&
-      bounds &&
-      (pointer.clientX < bounds.left ||
-        pointer.clientX > bounds.right ||
-        pointer.clientY < bounds.top ||
-        pointer.clientY > bounds.bottom)
-    ) {
-      sortableEvent.from?.insertBefore(sortableEvent.item, sortableEvent.from.children[sortableEvent.oldIndex] ?? null)
-      return
-    }
-    const id = sortableEvent?.item?.dataset?.id
-    const task = allKanbanItems.find((task) => task.id === id)
-    const sourceDay = sortableEvent?.item?.dataset?.sessionDay
-    if (task && sourceDay) {
-      try {
-        await updateEntity({
-          type: 'task-session',
-          id,
-          data: { type: 'move-day', from: sourceDay, to: day.format('YYYY-MM-DD') },
-        })
-      } catch (error) {
-        sortableEvent.from?.insertBefore(
-          sortableEvent.item,
-          sortableEvent.from.children[sortableEvent.oldIndex] ?? null,
-        )
-        message.error(error instanceof Error ? error.message : 'Could not move sessions.')
-      }
-      return
-    }
-    // TODO: 支持拖拽修改 deadline
-    if (!task?.start) return logseq.UI.showMsg('Drag task without start date is not supported', 'error')
-    if (!task || !id) return logseq.UI.showMsg('task id not found', 'error')
-    let startDay = day
-    // remain time info
-    if (task.allDay === false) {
-      startDay = replaceDateInfo(task.start, day)
-    }
-    await updateEntity({
-      type: 'task-date',
-      id,
-      data: {
-        start: startDay,
-        allDay: task.allDay,
-      },
-    })
-    track('KanBan: Drag Task')
-  }
-
-  useImperativeHandle(ref, () => ({
-    scrollIntoView: () => {
-      columnContainerRef.current?.scrollIntoView({ block: 'nearest', inline: 'start' })
-    },
-    // 你可以在这里添加更多你需要暴露给父组件的方法或属性
-  }))
-
+export default function Column({
+  day,
+  tasks,
+  allKanbanItems,
+  accountingTasks = allKanbanItems,
+  compact = false,
+  muted = false,
+}: ColumnProps) {
+  const { t } = useTranslation()
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const overflowContent = useRef<HTMLElement>(null)
+  const overflowButton = useRef<HTMLButtonElement>(null)
   useEffect(() => {
-    if (app.view === 'tasks' && !hadBindDropRef.current && columnContainerRef.current) {
-      new ThirdPartyDraggable(columnContainerRef.current, {
-        itemSelector: '.droppable-task-element',
-        mirrorSelector: '.dragged-mirror-element',
-      })
-      hadBindDropRef.current = true
-    }
-    return () => {
-      hadBindDropRef.current = false
-    }
-  }, [app.view])
-
+    if (overflowOpen) overflowContent.current?.focus()
+  }, [overflowOpen])
+  const isToday = day.isSame(dayjs(), 'day')
+  const doneCount = tasks.filter((task) => task.status === 'done').length
+  const totals = getDailyTimeTotals(accountingTasks, day.format('YYYY-MM-DD'))
   return (
-    <>
-      <div key={dateStr} className="mt-2 flex w-[265px] shrink-0 flex-col" id={dateStr} ref={columnContainerRef}>
-        {/* ========= Title ========= */}
-        <ColumnTitle day={day} />
-
-        {/* ========= Progress ========= */}
-        {isToday ? (
-          <Progress
-            size="small"
-            status="success"
-            className="!m-0"
-            showInfo={false}
-            percent={(doneTasks.length / _dayTasks.length) * 100}
-          />
-        ) : (
-          <div className="h-[24px]"></div>
-        )}
-
-        {/* ========= Add a task Card ========= */}
-        <AddTaskCard
-          isGray={undoneTasks.length === 0}
-          day={day}
-          actualTime={actualTime}
-          estimatedTime={estimatedTime}
-        />
-
-        {/* ========= Tasks List ========= */}
-        <ReactSortable
-          sort={false}
-          forceFallback // 该属性如果不加就无法与 fullcalendar 交互
-          className={cn('flex flex-1 flex-col gap-2 overflow-y-auto', { 'pb-28': _dayTasks.length === 0 })}
-          group="shared"
-          dragClass="dragged-mirror-element"
-          draggable=".droppable-task-element"
-          list={_dayTasks}
-          // onMove={(event, originalEvent) => {
-          //   console.log('[faiz:] === xxx onMove', event)
-          //   console.log('[faiz:] === xxx originalEvent', originalEvent)
-          //   return true
-          // }}
-          setList={() => {
-            // console.log(`[faiz:] === setList ${day.format('MM-DD ddd')}`, list)
-          }}
-          onAdd={onAddTaskByDrag}
+    <section
+      aria-label={day.format('YYYY-MM-DD')}
+      className={cn(
+        'flex min-w-0 flex-col',
+        compact ? 'min-h-[190px] border border-gray-200 p-2 dark:border-zinc-700' : 'h-full pt-2',
+        { 'bg-gray-200/50 dark:bg-zinc-900/50': muted },
+      )}
+    >
+      {compact ? (
+        <div className="flex items-center justify-between text-sm">
+          <time
+            dateTime={day.format('YYYY-MM-DD')}
+            className={cn('rounded px-1.5 py-0.5', {
+              'bg-blue-600 text-white': isToday,
+              'text-gray-500': muted && !isToday,
+            })}
+          >
+            {day.format(day.date() === 1 ? 'MMM D' : 'D')}
+          </time>
+          <span className="text-xs text-gray-500">{tasks.length || ''}</span>
+        </div>
+      ) : (
+        <>
+          <ColumnTitle day={day} />
+          {isToday ? (
+            <Progress
+              size="small"
+              status="success"
+              className="!m-0"
+              showInfo={false}
+              percent={tasks.length ? (doneCount / tasks.length) * 100 : 0}
+            />
+          ) : (
+            <div className="h-[24px]" />
+          )}
+        </>
+      )}
+      <AddTaskCard
+        isGray={doneCount === tasks.length}
+        day={day}
+        actualTime={totals.actualMinutes}
+        estimatedTime={totals.estimatedMinutes}
+        compact={compact}
+      />
+      <TaskDayList
+        day={day}
+        tasks={tasks}
+        allTasks={allKanbanItems}
+        compact={compact}
+        limit={compact ? 3 : undefined}
+      />
+      {compact && tasks.length > 3 ? (
+        <Popover
+          trigger="click"
+          open={overflowOpen}
+          onOpenChange={setOverflowOpen}
+          destroyTooltipOnHide
+          placement="right"
+          title={day.format('ddd, D MMM YYYY')}
+          content={
+            <section
+              ref={overflowContent}
+              tabIndex={-1}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  event.stopPropagation()
+                  setOverflowOpen(false)
+                  overflowButton.current?.focus()
+                }
+              }}
+              aria-label={t('All tasks for {{date}}', { date: day.format('YYYY-MM-DD') })}
+              className="flex max-h-[60vh] w-[300px] flex-col overflow-y-auto"
+            >
+              <TaskDayList day={day} tasks={tasks} allTasks={allKanbanItems} />
+            </section>
+          }
         >
-          {_dayTasks.map((task) => (
-            <TaskCard key={task.id} task={task} />
-          ))}
-        </ReactSortable>
-      </div>
-
-      {/* Daily Review Modal */}
-    </>
+          <button
+            ref={overflowButton}
+            type="button"
+            aria-expanded={overflowOpen}
+            className="mt-2 rounded px-1 text-left text-xs text-blue-700 hover:underline dark:text-blue-300"
+          >
+            {t('+{{count}} more', { count: tasks.length - 3 })}
+          </button>
+        </Popover>
+      ) : null}
+    </section>
   )
 }
-
-export type ColumnHandle = {
-  scrollIntoView: () => void
-}
-export default React.forwardRef<ColumnHandle, ColumnProps>(Column)
