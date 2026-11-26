@@ -484,10 +484,11 @@ export const updateBlockTaskStatus = async (taskInfo: AgendaEntity, status: Agen
     message.error('This is not a todo block')
     return null
   }
+  if (rawTodoTag === todoTag) return { block, previousMarker: rawTodoTag }
   const reg = new RegExp(`^${rawTodoTag}`)
   const newContent = block.content.replace(reg, todoTag)
   await logseq.Editor.updateBlock(block.uuid, newContent)
-  return logseq.Editor.getBlock(block.uuid)
+  return { block: await logseq.Editor.getBlock(block.uuid), previousMarker: rawTodoTag }
 }
 
 /**

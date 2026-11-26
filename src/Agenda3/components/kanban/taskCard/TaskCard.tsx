@@ -38,11 +38,15 @@ const TaskCard = ({ task, compact = false }: { task: AgendaTaskWithStartOrDeadli
 
   const { updateEntity, deleteEntity } = useAgendaEntities()
 
-  const onClickTaskMark = async (event: React.MouseEvent, task: AgendaEntity, status: AgendaEntity['status']) => {
+  const onClickTaskMark = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+    task: AgendaEntity,
+    status: AgendaEntity['status'],
+  ) => {
     event.stopPropagation()
     if (task.rrule) return message.error('Please modify the status of the recurring task in logseq.')
     try {
-      await updateEntity({ type: 'task-status', id: task.id, data: status })
+      await updateEntity({ type: 'task-status', id: task.id, data: status, completionSource: event.currentTarget })
     } catch (error) {
       message.error(error instanceof Error ? error.message : 'Could not update task. Please try again.')
     }

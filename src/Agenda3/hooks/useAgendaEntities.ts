@@ -26,6 +26,7 @@ import {
   updateTaskBlock,
   updateBlockSessions,
 } from '../helpers/block'
+import { prepareCompletionFeedback } from '../helpers/completionFeedback'
 import { agendaEntitiesAtom, invalidateEntitiesAtom, refreshEntitiesAtom } from '../models/entities/entities'
 
 const useAgendaEntities = () => {
@@ -57,6 +58,7 @@ const useAgendaEntities = () => {
           type: 'task-status'
           id: string
           data: AgendaTaskWithStart['status']
+          completionSource?: HTMLElement
         }
       | {
           type: 'task-remove-date'
@@ -74,8 +76,13 @@ const useAgendaEntities = () => {
           data: AgendaObjective['status']
         }
     ) & { validateSchedule?: ScheduleValidator },
-  ) =>
-    serializeTaskWrite(params.id, async () => {
+  ) => {
+    const celebrate =
+      params.type === 'task-status' && params.data === 'done' && params.completionSource
+        ? prepareCompletionFeedback(params.completionSource)
+        : undefined
+
+    return serializeTaskWrite(params.id, async () => {
       const { type, id, data, validateSchedule } = params
       const task = entities.find((task) => task.id === id)
       if (!task) {
@@ -83,6 +90,7 @@ const useAgendaEntities = () => {
         throw new Error('Entity not found')
       }
       let rawBlock: BlockEntity | null = null
+      let previousMarker: string | undefined
       invalidate()
       switch (type) {
         case 'task-session':
@@ -95,9 +103,12 @@ const useAgendaEntities = () => {
           rawBlock = await updateBlockDateInfo({ ...data, uuid: id }, validateSchedule)
           break
         case 'task-status':
-        case 'objective-status':
-          rawBlock = await updateBlockTaskStatus(task, data)
+        case 'objective-status': {
+          const statusUpdate = await updateBlockTaskStatus(task, data)
+          rawBlock = statusUpdate?.block ?? null
+          previousMarker = statusUpdate?.previousMarker
           break
+        }
         case 'task-remove-date':
           rawBlock = await deleteBlockDateInfo(id, data?.day)
           break
@@ -118,6 +129,7 @@ const useAgendaEntities = () => {
       }
 
       const newTask = await transformBlockToAgendaEntity(block, settings)
+      if (previousMarker && previousMarker !== 'DONE' && newTask.status === 'done') celebrate?.()
       invalidate()
       const isFilterMode = (settings.selectedFilters || [])?.length > 0
       if (isFilterMode && (newTask.filters ?? []).length === 0) {
@@ -145,6 +157,7 @@ const useAgendaEntities = () => {
       })
       return newTask
     })
+  }
 
   const deleteEntity = (id: string) => {
     deleteEntityBlock(id)

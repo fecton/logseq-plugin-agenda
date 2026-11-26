@@ -23,10 +23,10 @@ export function ReviewTask({ task, reasons = [] }: { task: AgendaEntity; reasons
   const [saving, setSaving] = useState(false)
   const recurring = Boolean(task.rrule || task.rawBlock.repeated)
   const openInLogseq = () => navToLogseqBlock(task, currentGraph)
-  const complete = async () => {
+  const complete = async (event: React.MouseEvent<HTMLElement>) => {
     setSaving(true)
     try {
-      await updateEntity({ type: 'task-status', id: task.id, data: 'done' })
+      await updateEntity({ type: 'task-status', id: task.id, data: 'done', completionSource: event.currentTarget })
     } catch (error) {
       message.error(t('Could not save task. Please try again.'))
     } finally {

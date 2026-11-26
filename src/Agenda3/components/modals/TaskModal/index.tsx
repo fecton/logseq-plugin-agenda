@@ -73,6 +73,7 @@ const TaskModal = ({
   const _open = children ? internalOpen : open
   const [mode, setMode] = useState<'Normal' | 'Advanced'>('Normal')
   const titleInputRef = React.useRef<MentionsRef>(null)
+  const completeButtonRef = React.useRef<HTMLElement>(null)
   const sizeSelectId = React.useId()
   const prioritySelectId = React.useId()
   const [titleTagSearchText, setTitleTagSearchText] = useState('')
@@ -185,14 +186,14 @@ const TaskModal = ({
     refreshPages()
     messageApi.success('Page created')
   }
-  const onSwitchTaskStatus = async (status: AgendaEntity['status']) => {
+  const onSwitchTaskStatus = async (status: AgendaEntity['status'], completionSource?: HTMLElement) => {
     if (editDisabled) return messageApi.error('Please modify the status of the recurring task in logseq.')
     if (info.type !== 'edit') return
 
     if (saving) return
     setSaving(true)
     try {
-      await updateEntity({ type: 'task-status', id: info.initialTaskData.id, data: status })
+      await updateEntity({ type: 'task-status', id: info.initialTaskData.id, data: status, completionSource })
       onOk?.()
       setInternalOpen(false)
     } catch (error) {
@@ -223,7 +224,7 @@ const TaskModal = ({
           onSwitchTaskStatus('todo')
         }
         if (info.type === 'edit' && info.initialTaskData.status === 'todo') {
-          onSwitchTaskStatus('done')
+          onSwitchTaskStatus('done', completeButtonRef.current ?? undefined)
         }
         event.stopPropagation()
       }
@@ -262,10 +263,11 @@ const TaskModal = ({
             <div>
               {info.type === 'edit' && info.initialTaskData.status === 'todo' ? (
                 <Button
+                  ref={completeButtonRef}
                   className="inline-flex items-center px-2"
                   icon={<IoIosCheckmarkCircleOutline className="text-base" />}
                   disabled={editDisabled || saving}
-                  onClick={() => onSwitchTaskStatus('done')}
+                  onClick={(event) => onSwitchTaskStatus('done', event.currentTarget)}
                 >
                   {t('Complete')}
                 </Button>

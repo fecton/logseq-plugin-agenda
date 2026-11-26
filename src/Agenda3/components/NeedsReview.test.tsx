@@ -70,7 +70,16 @@ test('shows only overdue tasks once, routes recurring edits to Logseq, and retai
         rejectSave = reject
       }),
   )
-  fireEvent.click(within(screen.getByText('Old task').closest('article')!).getByRole('button', { name: 'Mark done' }))
+  const completeButton = within(screen.getByText('Old task').closest('article')!).getByRole('button', {
+    name: 'Mark done',
+  })
+  fireEvent.click(completeButton)
+  expect(updateEntity).toHaveBeenCalledWith({
+    type: 'task-status',
+    id: 'Old task',
+    data: 'done',
+    completionSource: completeButton,
+  })
   expect(screen.getByText('Old task')).toBeVisible()
   await act(async () => rejectSave(new Error('offline')))
   await waitFor(() => expect(screen.getByText('Could not save task. Please try again.')).toBeVisible())

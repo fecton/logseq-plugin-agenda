@@ -29,7 +29,7 @@ const Toolbar = ({
   task: AgendaTaskWithStartOrDeadline
   groupType: 'page' | 'filter'
   compact?: boolean
-  onClickMark: (event: React.MouseEvent, task: AgendaEntity, status: AgendaEntity['status']) => void
+  onClickMark: (event: React.MouseEvent<HTMLButtonElement>, task: AgendaEntity, status: AgendaEntity['status']) => void
 }) => {
   const { currentGraph } = useAtomValue(logseqAtom)
   const { t } = useTranslation()
