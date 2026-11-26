@@ -9,6 +9,7 @@ import { ReactSortable } from 'react-sortablejs'
 import { useTheme } from '@/Agenda3/components/ThemeProvider'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
 import { categorizeTasksByPage } from '@/Agenda3/helpers/task'
+import { appAtom } from '@/Agenda3/models/app'
 import { logseqAtom } from '@/Agenda3/models/logseq'
 import { settingsAtom } from '@/Agenda3/models/settings'
 import { cn } from '@/util/util'
@@ -29,6 +30,7 @@ const Backlog = ({
   const { currentTheme: theme } = useTheme()
   const taskContainerRef = useRef<HTMLDivElement>(null)
   const backlogTasks = useAtomValue(excludeOverdue ? plannerBacklogsAtom : backlogsAtom)
+  const { view } = useAtomValue(appAtom)
   const { currentGraph } = useAtomValue(logseqAtom)
   const categorizedTasks = categorizeTasksByPage(backlogTasks)
   const projects = categorizedTasks.map(({ project }) => project)
@@ -49,13 +51,13 @@ const Backlog = ({
     })
 
   useEffect(() => {
-    if (bindCalendar && taskContainerRef.current) {
+    if (bindCalendar && view === 'calendar' && taskContainerRef.current) {
       const draggable = new Draggable(taskContainerRef.current, {
         itemSelector: '.droppable-task-element',
       })
       return () => draggable.destroy()
     }
-  }, [backlogTasks.length, bindCalendar])
+  }, [bindCalendar, view])
   return (
     <div
       className={cn('flex h-full w-[290px] flex-col border-l bg-gray-50 pl-2 shadow-md dark:bg-zinc-900', s.backlog)}
@@ -100,7 +102,7 @@ const Backlog = ({
                 <ReactSortable
                   forceFallback
                   className="flex flex-col gap-2"
-                  group="planner"
+                  group={bindCalendar ? { name: 'kanban', put: false } : 'planner'}
                   dragClass="dragged-mirror-element"
                   draggable=".droppable-task-element"
                   list={project.tasks}

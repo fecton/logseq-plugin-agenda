@@ -15,19 +15,11 @@ import TaskDayList from './TaskDayList'
 export type ColumnProps = {
   day: Dayjs
   tasks: AgendaTaskWithStartOrDeadline[]
-  allKanbanItems: AgendaTaskWithStartOrDeadline[]
   accountingTasks?: AgendaEntity[]
   compact?: boolean
   muted?: boolean
 }
-export default function Column({
-  day,
-  tasks,
-  allKanbanItems,
-  accountingTasks = allKanbanItems,
-  compact = false,
-  muted = false,
-}: ColumnProps) {
+export default function Column({ day, tasks, accountingTasks = tasks, compact = false, muted = false }: ColumnProps) {
   const { t } = useTranslation()
   const [overflowOpen, setOverflowOpen] = useState(false)
   const overflowContent = useRef<HTMLElement>(null)
@@ -83,13 +75,7 @@ export default function Column({
         estimatedTime={totals.estimatedMinutes}
         compact={compact}
       />
-      <TaskDayList
-        day={day}
-        tasks={tasks}
-        allTasks={allKanbanItems}
-        compact={compact}
-        limit={compact ? 3 : undefined}
-      />
+      <TaskDayList day={day} tasks={tasks} compact={compact} limit={compact ? 3 : undefined} />
       {compact && tasks.length > 3 ? (
         <Popover
           trigger="click"
@@ -112,7 +98,7 @@ export default function Column({
               aria-label={t('All tasks for {{date}}', { date: day.format('YYYY-MM-DD') })}
               className="flex max-h-[60vh] w-[300px] flex-col overflow-y-auto"
             >
-              <TaskDayList day={day} tasks={tasks} allTasks={allKanbanItems} />
+              <TaskDayList day={day} tasks={tasks} />
             </section>
           }
         >

@@ -51,7 +51,6 @@ export default function KanBan() {
             key={day.format('YYYY-MM-DD')}
             day={day}
             tasks={tasksInDay.get(day.format(DATE_FORMATTER_FOR_KEY)) ?? []}
-            allKanbanItems={tasks}
             accountingTasks={accountingTasks}
             compact={month}
             muted={month && !day.isSame(range.start, 'month')}

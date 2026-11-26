@@ -15,18 +15,16 @@ import TaskCard from './taskCard/TaskCard'
 export default function TaskDayList({
   day,
   tasks,
-  allTasks,
   compact = false,
   limit,
 }: {
   day: Dayjs
   tasks: AgendaTaskWithStartOrDeadline[]
-  allTasks: AgendaTaskWithStartOrDeadline[]
   compact?: boolean
   limit?: number
 }) {
   const container = useRef<HTMLDivElement>(null)
-  const { updateEntity } = useAgendaEntities()
+  const { entities, updateEntity } = useAgendaEntities()
   const shown = sortKanbanTasks(tasks).slice(0, limit)
   useEffect(() => {
     if (!container.current) return
@@ -37,7 +35,6 @@ export default function TaskDayList({
     return () => draggable.destroy()
   }, [])
   const onAdd = async (event: SortableEvent & { originalEvent?: MouseEvent | TouchEvent }) => {
-    const restore = () => event.from?.insertBefore(event.item, event.from.children[event.oldIndex ?? 0] ?? null)
     // Sortable can report its last hovered list when the actual drop is in FullCalendar.
     const originalEvent = event.originalEvent
     const pointer =
@@ -54,14 +51,11 @@ export default function TaskDayList({
         pointer.clientY > bounds.bottom ||
         (hit && !container.current?.contains(hit)))
     ) {
-      restore()
       return
     }
     const id = event.item.dataset.id
     const sourceDay = event.item.dataset.sessionDay
-    const task = allTasks.find((item) => item.id === id)
-    // React owns the list; restore its DOM before the saved state changes the projections.
-    restore()
+    const task = entities.find((item) => item.id === id)
     try {
       if (!id || !task) throw new Error('Task not found. Refresh Agenda and try again.')
       if (sourceDay) {
@@ -71,14 +65,19 @@ export default function TaskDayList({
           id,
           data: { type: 'move-day', from: sourceDay, to: day.format('YYYY-MM-DD') },
         })
+      } else if (!task.start && task.sessions !== undefined) {
+        await updateEntity({
+          type: 'task-session',
+          id,
+          data: { type: 'add', id: crypto.randomUUID(), start: day },
+        })
       } else {
-        if (!task.start) throw new Error('Drag task without start date is not supported')
         await updateEntity({
           type: 'task-date',
           id,
           data: {
-            start: task.allDay ? day : replaceDateInfo(task.start, day),
-            allDay: task.allDay,
+            start: task.start && !task.allDay ? replaceDateInfo(task.start, day) : day,
+            allDay: !task.start || task.allDay,
           },
         })
       }
@@ -92,7 +91,7 @@ export default function TaskDayList({
         sort={false}
         forceFallback
         className={cn('flex min-h-[48px] flex-1 flex-col gap-2', { 'overflow-y-auto': !compact })}
-        group="shared"
+        group="kanban"
         dragClass="dragged-mirror-element"
         draggable=".droppable-task-element"
         list={shown}
