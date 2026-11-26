@@ -4,14 +4,18 @@ import { expect, test } from 'vitest'
 import { findConflictingOccurrence, getSessionOccurrences, type TaskRecurrence } from '../taskRecurrence'
 import {
   DEFAULT_WORKING_HOURS,
+  blockedActivityError,
   getWorkingHours,
   readWorkingHours,
   validateWorkingHours,
   workingHoursError,
+  type BlockedActivity,
 } from '../workingHours'
 
 const splitHours = { ...DEFAULT_WORKING_HOURS, enabled: true }
 const date = (day: number, time: string) => new Date(`2026-11-${day}T${time}`)
+const sleep: BlockedActivity = { name: 'Sleep', preset: 'daily', customDays: [], start: '22:00', end: '06:00' }
+const work: BlockedActivity = { name: 'Work', preset: 'workdays', customDays: [], start: '09:00', end: '17:00' }
 
 test('split hours allow exact boundaries and block the gap and non-working days', () => {
   const { allows } = getWorkingHours(splitHours)!
@@ -53,15 +57,73 @@ test('adjacent periods and midnight work as continuous time only where the next 
       { start: '22:00', end: '24:00' },
     ],
   })!
-  expect(hours.businessHours.map(({ startTime, endTime }) => [startTime, endTime])).toEqual([
-    ['00:00', '02:00'],
-    ['21:00', '24:00'],
+  expect(hours.blockedPeriods.filter(({ day }) => day === 4)).toEqual([
+    { day: 4, start: '02:00', end: '21:00', label: '' },
   ])
   expect(hours.allows(date(26, '21:30'), date(27, '01:30'))).toBe(true)
   expect(hours.allows(date(27, '22:00'), date(28, '00:00'))).toBe(true)
   expect(hours.allows(date(27, '22:00'), date(28, '00:01'))).toBe(false)
 })
 
+test('compiles daily overnight and workday activities into the same non-working schedule', () => {
+  const hours = getWorkingHours({ ...DEFAULT_WORKING_HOURS, blockedActivities: [sleep, work] })!
+  const thursday = hours.blockedPeriods.filter(({ day }) => day === 4)
+  const saturday = hours.blockedPeriods.filter(({ day }) => day === 6)
+  expect(thursday.map(({ start, end, label }) => [start, end, label])).toEqual([
+    ['00:00', '06:00', 'Sleep'],
+    ['09:00', '17:00', 'Work'],
+    ['22:00', '24:00', 'Sleep'],
+  ])
+  expect(saturday.map(({ label }) => label)).toEqual(['Sleep', 'Sleep'])
+  expect(hours.allows(date(27, '04:00'), date(27, '06:00'))).toBe(false)
+  expect(hours.allows(date(27, '06:00'), date(27, '09:00'))).toBe(true)
+  expect(hours.allows(date(27, '08:30'), date(27, '09:30'))).toBe(false)
+  expect(hours.allows(date(28, '08:30'), date(28, '09:30'))).toBe(true)
+})
+
+test('merges overlapping blocks and honors the selected start day for an overnight activity', () => {
+  const shift: BlockedActivity = {
+    ...work,
+    name: 'Shift',
+    preset: 'custom',
+    customDays: [5],
+    start: '21:00',
+    end: '01:00',
+  }
+  const hours = getWorkingHours({ ...DEFAULT_WORKING_HOURS, blockedActivities: [sleep, shift] })!
+  expect(hours.blockedPeriods.filter(({ day }) => day === 6)).toMatchObject([
+    { start: '00:00', end: '01:00', label: 'Sleep · Shift' },
+    { start: '01:00', end: '06:00', label: 'Sleep' },
+    { start: '22:00', end: '24:00', label: 'Sleep' },
+  ])
+  expect(hours.allows(date(27, '20:00'), date(27, '21:00'))).toBe(true)
+  expect(hours.allows(date(26, '21:00'), date(26, '22:00'))).toBe(true)
+  expect(hours.allows(date(27, '21:00'), date(27, '22:00'))).toBe(false)
+})
+
+test('activities further restrict saved work periods and old settings still load', () => {
+  const { enabled, preset, customDays, ranges } = splitHours
+  const legacy = { enabled, preset, customDays, ranges }
+  const stored = readWorkingHours(JSON.stringify(legacy))
+  expect(stored).toEqual(splitHours)
+  const hours = getWorkingHours({ ...stored, blockedActivities: [work] })!
+  expect(hours.allows(date(26, '08:00'), date(26, '09:00'))).toBe(true)
+  expect(hours.allows(date(26, '08:00'), date(26, '10:00'))).toBe(false)
+  expect(hours.allows(date(28, '08:00'), date(28, '09:00'))).toBe(false)
+  expect(readWorkingHours(JSON.stringify({ ...legacy, blockedActivities: [null, work] })).blockedActivities).toEqual([
+    work,
+  ])
+  expect(blockedActivityError({ ...sleep, end: sleep.start })).toBeTruthy()
+})
+
+test('an activity on a later weekday blocks a repeating task even with work periods disabled', async () => {
+  const hours = getWorkingHours({ ...DEFAULT_WORKING_HOURS, blockedActivities: [work] })!
+  const validate = validateWorkingHours(hours, (start) => start.format('YYYY-MM-DD HH:mm'))
+  const sessions = [{ id: 'sat', start: dayjs('2026-11-28T09:00'), end: dayjs('2026-11-28T10:00') }]
+  await expect(
+    validate({ sessions, recurrence: { frequency: 'day', interval: 1, end: { type: 'after', count: 3 } } }),
+  ).rejects.toThrow('2026-11-30 09:00')
+})
 const springStart = new Date('2026-03-29T01:30:00+01:00')
 const springEnd = new Date('2026-03-29T03:30:00+02:00')
 

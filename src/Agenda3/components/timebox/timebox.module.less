@@ -1,6 +1,13 @@
 .fullCalendarTimeBox {
   --non-working-hatch: rgb(71 85 105 / 16%);
 
+  :global(.fc) .nonWorkingPeriod {
+    opacity: 1;
+    pointer-events: none;
+    background-image: repeating-linear-gradient(45deg, var(--non-working-hatch) 0 1px, transparent 1px 8px),
+      repeating-linear-gradient(-45deg, var(--non-working-hatch) 0 1px, transparent 1px 8px);
+  }
+
   :global {
     .fc {
       flex: 1;
@@ -15,14 +22,9 @@
       .fc-timegrid-slot-minor {
         border-top: none;
       }
-      .fc-non-business {
-        background-color: transparent;
-        background-image: repeating-linear-gradient(45deg, var(--non-working-hatch) 0 1px, transparent 1px 8px),
-          repeating-linear-gradient(-45deg, var(--non-working-hatch) 0 1px, transparent 1px 8px);
-      }
       .fc-timegrid-slot-label {
         font-size: 10px;
-        @apply text-gray-400 font-medium;
+        @apply font-medium text-gray-400;
       }
       .fc-scrollgrid {
         @apply border-none;
@@ -40,7 +42,7 @@
 
     :global {
       .fc-timegrid-body .fc-timegrid-slots {
-        tr{
+        tr {
           @apply bg-zinc-900;
         }
       }

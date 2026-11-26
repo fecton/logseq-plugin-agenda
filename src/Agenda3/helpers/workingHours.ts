@@ -1,14 +1,32 @@
 import type { Dayjs } from 'dayjs'
 
+import { minutesToHHmm } from './fullCalendar'
 import { findConflictingOccurrence, type TaskRecurrence } from './taskRecurrence'
 import { getTaskSessions, sameSession, type PlannedSession } from './taskSessions'
 
+export const WORKING_HOURS_PRESETS = ['workdays', 'weekends', 'custom'] as const
+export const ACTIVITY_PRESETS = ['daily', ...WORKING_HOURS_PRESETS] as const
+
+type TimeRange = { start: string; end: string }
+export type BlockedActivity = TimeRange & {
+  name: string
+  preset: (typeof ACTIVITY_PRESETS)[number]
+  customDays: number[]
+}
+
 export type WorkingHoursSettings = {
   enabled: boolean
-  preset: 'workdays' | 'weekends' | 'custom'
+  preset: (typeof WORKING_HOURS_PRESETS)[number]
   customDays: number[]
-  ranges: { start: string; end: string }[]
+  ranges: TimeRange[]
+  blockedActivities: BlockedActivity[]
 }
+
+const weekdays = [0, 1, 2, 3, 4, 5, 6]
+const daysByPreset = { daily: weekdays, workdays: [1, 2, 3, 4, 5], weekends: [0, 6] }
+const getDays = ({ preset, customDays }: Pick<BlockedActivity, 'preset' | 'customDays'>) =>
+  preset === 'custom' ? customDays : daysByPreset[preset]
+const minutesPerDay = 1440
 
 export const DEFAULT_WORKING_HOURS: WorkingHoursSettings = {
   enabled: false,
@@ -18,12 +36,11 @@ export const DEFAULT_WORKING_HOURS: WorkingHoursSettings = {
     { start: '08:00', end: '10:00' },
     { start: '18:00', end: '20:00' },
   ],
+  blockedActivities: [],
 }
 
-export const WORKING_HOURS_PRESETS = ['workdays', 'weekends', 'custom'] as const
-
 function clockMinutes(time: unknown) {
-  if (time === '24:00') return 1440
+  if (time === '24:00') return minutesPerDay
   if (typeof time !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return NaN
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3))
 }
@@ -40,6 +57,25 @@ export function workingHoursError(settings: WorkingHoursSettings) {
   }
 }
 
+const validDays = (days: unknown) =>
+  Array.isArray(days) && days.every((day) => typeof day === 'number' && weekdays.includes(day))
+
+export function blockedActivityError(activity: BlockedActivity) {
+  if (typeof activity?.name !== 'string' || !activity.name.trim()) return 'Enter a name for each blocked activity.'
+  if (
+    !ACTIVITY_PRESETS.includes(activity.preset) ||
+    !validDays(activity.customDays) ||
+    (activity.preset === 'custom' && !activity.customDays.length)
+  )
+    return 'Select at least one day for each blocked activity.'
+
+  const start = clockMinutes(activity.start)
+  const end = clockMinutes(activity.end)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start === minutesPerDay || start === end) {
+    return 'Each blocked activity needs different start and end times.'
+  }
+}
+
 export function readWorkingHours(value?: string): WorkingHoursSettings {
   if (!value) return DEFAULT_WORKING_HOURS
   try {
@@ -47,17 +83,62 @@ export function readWorkingHours(value?: string): WorkingHoursSettings {
     if (
       typeof settings?.enabled === 'boolean' &&
       WORKING_HOURS_PRESETS.includes(settings.preset) &&
-      Array.isArray(settings.customDays) &&
-      settings.customDays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6) &&
+      validDays(settings.customDays) &&
       Array.isArray(settings.ranges) &&
       !workingHoursError(settings)
     ) {
-      return settings
+      return {
+        ...settings,
+        blockedActivities: Array.isArray(settings.blockedActivities)
+          ? settings.blockedActivities.filter((activity) => !blockedActivityError(activity))
+          : [],
+      }
     }
   } catch {
     // Settings may have been edited outside Agenda.
   }
   return DEFAULT_WORKING_HOURS
+}
+
+function compileDay(settings: WorkingHoursSettings, day: number) {
+  const workPeriods = settings.enabled
+    ? getDays(settings).includes(day)
+      ? settings.ranges.map(({ start, end }) => [clockMinutes(start), clockMinutes(end)])
+      : []
+    : [[0, minutesPerDay]]
+
+  const activities = settings.blockedActivities.flatMap((activity) => {
+    const days = getDays(activity)
+    const start = clockMinutes(activity.start)
+    const end = clockMinutes(activity.end)
+    const name = activity.name.trim()
+    const ranges: { start: number; end: number; name: string }[] = []
+    if (days.includes(day)) ranges.push({ start, end: end < start ? minutesPerDay : end, name })
+    if (end > 0 && end < start && days.includes((day + 6) % 7)) ranges.push({ start: 0, end, name })
+    return ranges
+  })
+  const boundaries = [
+    ...new Set([0, minutesPerDay, ...workPeriods.flat(), ...activities.flatMap(({ start, end }) => [start, end])]),
+  ].sort((a, b) => a - b)
+  const available: [number, number][] = []
+  const blocked: { from: number; to: number; label: string }[] = []
+
+  for (const [index, from] of boundaries.slice(0, -1).entries()) {
+    const to = boundaries[index + 1]
+    const label = [
+      ...new Set(activities.filter(({ start, end }) => start <= from && to <= end).map(({ name }) => name)),
+    ].join(' · ')
+    if (!label && workPeriods.some(([start, end]) => start <= from && to <= end)) {
+      const previous = available.at(-1)
+      if (previous?.[1] === from * 60_000) previous[1] = to * 60_000
+      else available.push([from * 60_000, to * 60_000])
+    } else {
+      const previous = blocked.at(-1)
+      if (previous?.to === from && previous.label === label) previous.to = to
+      else blocked.push({ from, to, label })
+    }
+  }
+  return { available, blocked }
 }
 
 function clockMilliseconds(date: Date) {
@@ -74,24 +155,21 @@ function offsetChange(start: number, end: number, offset: number) {
 }
 
 export function getWorkingHours(settings: WorkingHoursSettings) {
-  if (!settings.enabled) return
-  const daysOfWeek =
-    settings.preset === 'custom' ? settings.customDays : settings.preset === 'workdays' ? [1, 2, 3, 4, 5] : [0, 6]
-  const ranges: WorkingHoursSettings['ranges'] = []
-  for (const range of [...settings.ranges].sort((a, b) => a.start.localeCompare(b.start))) {
-    const previous = ranges.at(-1)
-    if (previous?.end === range.start) previous.end = range.end
-    else ranges.push({ ...range })
-  }
-  const businessHours = ranges.map(({ start, end }) => ({ startTime: start, endTime: end, daysOfWeek }))
-  const boundaries = ranges.map(({ start, end }) => [clockMinutes(start) * 60_000, clockMinutes(end) * 60_000])
-  const fullWeek =
-    new Set(daysOfWeek).size === 7 && ranges.length === 1 && ranges[0].start === '00:00' && ranges[0].end === '24:00'
+  if (!settings.enabled && !settings.blockedActivities.length) return
+  const schedule = weekdays.map((day) => compileDay(settings, day))
+  const blockedPeriods = schedule.flatMap(({ blocked }, day) =>
+    blocked.map(({ from, to, label }) => ({
+      day,
+      start: minutesToHHmm(from),
+      end: minutesToHHmm(to),
+      label,
+    })),
+  )
 
-  const coversClockRange = (first: Date, last: Date) => {
+  const coversClockRange = (available: [number, number][], first: Date, last: Date) => {
     const left = clockMilliseconds(first)
     const right = clockMilliseconds(last) + 1
-    return boundaries.some(([start, end]) => start <= left && right <= end)
+    return available.some(([start, end]) => start <= left && right <= end)
   }
 
   const allows = (start: Date, end: Date) => {
@@ -101,7 +179,8 @@ export function getWorkingHours(settings: WorkingHoursSettings) {
     const lastInstant = new Date(through - 1)
     let first = start
     while (from < through) {
-      if (!daysOfWeek.includes(first.getDay())) return false
+      const { available } = schedule[first.getDay()]
+      if (!available.length) return false
       const offset = first.getTimezoneOffset()
       if (
         first.getDate() === lastInstant.getDate() &&
@@ -109,7 +188,7 @@ export function getWorkingHours(settings: WorkingHoursSettings) {
         first.getFullYear() === lastInstant.getFullYear() &&
         offset === lastInstant.getTimezoneOffset()
       ) {
-        return coversClockRange(first, lastInstant)
+        return coversClockRange(available, first, lastInstant)
       }
       const midnight = new Date(from).setHours(24, 0, 0, 0)
       let until = Math.min(midnight, through)
@@ -119,13 +198,13 @@ export function getWorkingHours(settings: WorkingHoursSettings) {
         until = offsetChange(from, until - 1, offset)
         last = new Date(until - 1)
       }
-      if (!coversClockRange(first, last)) return false
+      if (!coversClockRange(available, first, last)) return false
       from = until
       first = new Date(from)
     }
     return true
   }
-  return { businessHours, allows, fullWeek }
+  return { blockedPeriods, allows, fullWeek: !blockedPeriods.length }
 }
 
 type TaskSchedule = { sessions: readonly PlannedSession[]; recurrence?: TaskRecurrence }

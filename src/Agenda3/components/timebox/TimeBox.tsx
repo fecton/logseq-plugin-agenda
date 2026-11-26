@@ -1,5 +1,5 @@
 import { LeftOutlined, RightOutlined, SettingOutlined } from '@ant-design/icons'
-import type { CalendarOptions } from '@fullcalendar/core'
+import type { CalendarOptions, EventInput } from '@fullcalendar/core'
 import interactionPlugin from '@fullcalendar/interaction'
 import FullCalendar from '@fullcalendar/react'
 import rrulePlugin from '@fullcalendar/rrule'
@@ -41,6 +41,20 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
   const [editingHours, setEditingHours] = useState(false)
   const savedHours = useMemo(() => readWorkingHours(settings.timeBoxWorkingHours), [settings.timeBoxWorkingHours])
   const hours = useMemo(() => getWorkingHours(savedHours), [savedHours])
+  const blockedEvents = useMemo<EventInput[]>(
+    () =>
+      (hours?.blockedPeriods ?? []).map(({ day, start, end, label }) => ({
+        title: label,
+        daysOfWeek: [day],
+        startTime: start,
+        endTime: end,
+        display: 'background',
+        backgroundColor: 'transparent',
+        classNames: [s.nonWorkingPeriod],
+        editable: false,
+      })),
+    [hours],
+  )
   const validateSchedule = useMemo(
     () =>
       hours &&
@@ -170,11 +184,10 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
         droppable
         editable
         selectable
-        businessHours={hours?.businessHours ?? false}
         selectAllow={hours && (({ start, end, allDay }) => !allDay && hours.allows(start, end))}
         eventAllow={eventAllow}
         ref={calendarRef}
-        events={calendarEvents}
+        events={[...calendarEvents, ...blockedEvents]}
         headerToolbar={false}
         initialView="timeGridOneDay"
         datesSet={({ start }) => setVisibleDate(dayjs(start).format('YYYY-MM-DD'))}
@@ -210,7 +223,17 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
           })
           track('Time Box: Select Event')
         }}
-        eventContent={(info) => <TheCalendarEvent info={info} validateSchedule={validateSchedule} />}
+        eventContent={(info) =>
+          info.event.display === 'background' ? (
+            info.event.title && (
+              <span className="block truncate px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
+                {info.event.title}
+              </span>
+            )
+          ) : (
+            <TheCalendarEvent info={info} validateSchedule={validateSchedule} />
+          )
+        }
         views={{
           timeGridOneDay: {
             type: 'timeGrid',
