@@ -6,6 +6,7 @@ import { useCallback } from 'react'
 
 import { transformBlockToAgendaEntity } from '@/Agenda3/helpers/task'
 import { serializeTaskWrite, type SessionOperation } from '@/Agenda3/helpers/taskSessions'
+import type { ScheduleValidator } from '@/Agenda3/helpers/workingHours'
 import { settingsAtom } from '@/Agenda3/models/settings'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaObjective } from '@/types/objective'
@@ -39,7 +40,7 @@ const useAgendaEntities = () => {
   }, [settings, refresh])
 
   const updateEntity = async (
-    params:
+    params: (
       | {
           type: 'task'
           id: string
@@ -71,10 +72,11 @@ const useAgendaEntities = () => {
           type: 'objective-status'
           id: string
           data: AgendaObjective['status']
-        },
+        }
+    ) & { validateSchedule?: ScheduleValidator },
   ) =>
     serializeTaskWrite(params.id, async () => {
-      const { type, id, data } = params
+      const { type, id, data, validateSchedule } = params
       const task = entities.find((task) => task.id === id)
       if (!task) {
         message.error('Entity not found')
@@ -84,16 +86,13 @@ const useAgendaEntities = () => {
       invalidate()
       switch (type) {
         case 'task-session':
-          rawBlock = await updateBlockSessions(id, data)
+          rawBlock = await updateBlockSessions(id, data, validateSchedule)
           break
         case 'task':
-          rawBlock = await updateTaskBlock(data, params.originalTask)
+          rawBlock = await updateTaskBlock(data, params.originalTask, validateSchedule)
           break
         case 'task-date':
-          rawBlock = await updateBlockDateInfo({
-            ...data,
-            uuid: id,
-          })
+          rawBlock = await updateBlockDateInfo({ ...data, uuid: id }, validateSchedule)
           break
         case 'task-status':
         case 'objective-status':
@@ -154,7 +153,7 @@ const useAgendaEntities = () => {
 
   const addNewEntity = async (
     params:
-      | { type: 'task'; data: CreateAgendaTask }
+      | { type: 'task'; data: CreateAgendaTask; validateSchedule?: ScheduleValidator }
       | {
           type: 'objective'
           data: CreateObjectiveForm
@@ -162,7 +161,7 @@ const useAgendaEntities = () => {
   ) => {
     const { type, data } = params
     const block = await transformBlockToBlockFromQuery(
-      type === 'task' ? await createTaskBlock(data) : await createObjectiveBlock(data),
+      type === 'task' ? await createTaskBlock(data, params.validateSchedule) : await createObjectiveBlock(data),
     )
     if (!block) {
       message.error('Failed to create block')

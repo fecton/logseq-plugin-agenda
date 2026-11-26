@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { IoIosCheckmarkCircle } from 'react-icons/io'
 import { RiDeleteBin4Line, RiInboxUnarchiveLine } from 'react-icons/ri'
 
+import type { ScheduleValidator } from '@/Agenda3/helpers/workingHours'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { CalendarEvent } from '@/types/fullcalendar'
 import { cn } from '@/util/util'
@@ -13,7 +14,13 @@ import TaskPriorityBadge from '../TaskPriorityBadge'
 import TaskSizeBadge from '../TaskSizeBadge'
 import TaskModal from '../modals/TaskModal'
 
-const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
+const TheCalendarEvent = ({
+  info,
+  validateSchedule,
+}: {
+  info: EventContentArg
+  validateSchedule?: ScheduleValidator
+}) => {
   const { t } = useTranslation()
   const { updateEntity, deleteEntity, entities } = useAgendaEntities()
   const onDeleteTask = async (taskId: string) => {
@@ -21,7 +28,12 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
   }
   const onRemoveTime = async () => {
     try {
-      await updateEntity({ type: 'task-session', id: savedTask.id, data: { type: 'remove', id: savedTask.sessionId! } })
+      await updateEntity({
+        type: 'task-session',
+        id: savedTask.id,
+        data: { type: 'remove', id: savedTask.sessionId! },
+        ...(validateSchedule && { validateSchedule }),
+      })
     } catch (error) {
       message.error(error instanceof Error ? error.message : 'Could not remove session.')
     }
@@ -55,6 +67,7 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
   if (!savedTask.rawBlock) return content
   return (
     <TaskModal
+      validateSchedule={validateSchedule}
       info={{
         type: 'edit',
         initialTaskData: savedTask,

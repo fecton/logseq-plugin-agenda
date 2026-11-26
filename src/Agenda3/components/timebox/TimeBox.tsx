@@ -1,4 +1,5 @@
-import { LeftOutlined, RightOutlined } from '@ant-design/icons'
+import { LeftOutlined, RightOutlined, SettingOutlined } from '@ant-design/icons'
+import type { CalendarOptions } from '@fullcalendar/core'
 import interactionPlugin from '@fullcalendar/interaction'
 import FullCalendar from '@fullcalendar/react'
 import rrulePlugin from '@fullcalendar/rrule'
@@ -6,22 +7,26 @@ import timeGridPlugin from '@fullcalendar/timegrid'
 import { Button } from 'antd'
 import dayjs from 'dayjs'
 import { useAtomValue } from 'jotai'
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { MdSchedule } from 'react-icons/md'
 
 // import useTheme from '@/hooks/useTheme'
 import { useTheme } from '@/Agenda3/components/ThemeProvider'
 import { transformAgendaTaskToCalendarEvent } from '@/Agenda3/helpers/fullCalendar'
+import { nextSessionDuration } from '@/Agenda3/helpers/taskSessions'
 import { track } from '@/Agenda3/helpers/umami'
+import { getWorkingHours, readWorkingHours, validateWorkingHours } from '@/Agenda3/helpers/workingHours'
 import useSessionScheduling, { captureSessionLeave } from '@/Agenda3/hooks/useSessionScheduling'
+import useSettings from '@/Agenda3/hooks/useSettings'
+import { agendaEntitiesAtom } from '@/Agenda3/models/entities/entities'
 import { calendarTasksAtom } from '@/Agenda3/models/entities/tasks'
-import { settingsAtom } from '@/Agenda3/models/settings'
 import { cn } from '@/util/util'
 
 import TaskModal from '../modals/TaskModal'
 import { type CreateTaskForm } from '../modals/TaskModal/useCreate'
 import TheCalendarEvent from './TheCalendarEvent'
+import WorkingHoursModal from './WorkingHoursModal'
 import s from './timebox.module.less'
 
 const FULL_CALENDAR_24HOUR_FORMAT = {
@@ -32,11 +37,34 @@ const FULL_CALENDAR_24HOUR_FORMAT = {
 const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
   const { t } = useTranslation()
   const { currentTheme: theme } = useTheme()
-  const settings = useAtomValue(settingsAtom)
+  const { settings, setSettings } = useSettings()
+  const [editingHours, setEditingHours] = useState(false)
+  const savedHours = useMemo(() => readWorkingHours(settings.timeBoxWorkingHours), [settings.timeBoxWorkingHours])
+  const hours = useMemo(() => getWorkingHours(savedHours), [savedHours])
+  const validateSchedule = useMemo(
+    () =>
+      hours &&
+      validateWorkingHours(hours, (start) =>
+        t('Session at {{date}} falls outside Time Box working hours.', { date: start.format('YYYY-MM-DD HH:mm') }),
+      ),
+    [hours, t],
+  )
   const groupType = settings.selectedFilters?.length ? 'filter' : 'page'
   const calendarRef = useRef<FullCalendar>(null)
-  const onEventScheduleUpdate = useSessionScheduling()
+  const onEventScheduleUpdate = useSessionScheduling(validateSchedule)
   const recentTasks = useAtomValue(calendarTasksAtom)
+  const entities = useAtomValue(agendaEntitiesAtom)
+  const eventAllow: CalendarOptions['eventAllow'] =
+    hours &&
+    (({ start, end, allDay }, event) => {
+      if (allDay) return false
+      // External cards can have a preview duration that differs from the next saved session.
+      const cardTask =
+        event && !event.start && !event.extendedProps.rawBlock && !event.extendedProps.eventKind
+          ? entities.find(({ id }) => id === event.id)
+          : undefined
+      return hours.allows(start, cardTask ? dayjs(start).add(nextSessionDuration(cardTask), 'minute').toDate() : end)
+    })
   const now = dayjs()
   const [visibleDate, setVisibleDate] = useState(() => now.format('YYYY-MM-DD'))
   const visibleStart = dayjs(visibleDate)
@@ -104,26 +132,36 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
     >
       <div className="group flex h-[44px] items-center justify-between">
         <div className="flex cursor-default items-center gap-1.5 px-2 py-1">
-          <MdSchedule className="text-lg" /> Time Box
+          <MdSchedule className="text-lg" /> {t('Time Box')}
         </div>
-        <div className="mr-4 flex opacity-0 transition-opacity group-hover/root:opacity-100">
+        <div className="mr-2 flex items-center">
           <Button
             size="small"
             type="text"
-            aria-label={t('Previous Time Box day')}
-            icon={<LeftOutlined />}
-            onClick={() => onClickNav('prev')}
+            title={t('Working hours')}
+            aria-label={t('Working hours')}
+            icon={<SettingOutlined />}
+            onClick={() => setEditingHours(true)}
           />
-          <Button size="small" type="text" onClick={() => onClickNav('today')}>
-            {t('Today')}
-          </Button>
-          <Button
-            size="small"
-            type="text"
-            aria-label={t('Next Time Box day')}
-            icon={<RightOutlined />}
-            onClick={() => onClickNav('next')}
-          />
+          <div className="flex opacity-0 transition-opacity focus-within:opacity-100 group-hover/root:opacity-100">
+            <Button
+              size="small"
+              type="text"
+              aria-label={t('Previous Time Box day')}
+              icon={<LeftOutlined />}
+              onClick={() => onClickNav('prev')}
+            />
+            <Button size="small" type="text" onClick={() => onClickNav('today')}>
+              {t('Today')}
+            </Button>
+            <Button
+              size="small"
+              type="text"
+              aria-label={t('Next Time Box day')}
+              icon={<RightOutlined />}
+              onClick={() => onClickNav('next')}
+            />
+          </div>
         </div>
       </div>
       <FullCalendar
@@ -132,16 +170,11 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
         droppable
         editable
         selectable
+        businessHours={hours?.businessHours ?? false}
+        selectAllow={hours && (({ start, end, allDay }) => !allDay && hours.allows(start, end))}
+        eventAllow={eventAllow}
         ref={calendarRef}
-        events={[
-          ...calendarEvents,
-          // {
-          //   title: 'test background',
-          //   start: '2023-09-22T10:30:00+08:00',
-          //   end: '2023-09-22T12:00:00+08:00',
-          //   display: 'background',
-          // },
-        ]}
+        events={calendarEvents}
         headerToolbar={false}
         initialView="timeGridOneDay"
         datesSet={({ start }) => setVisibleDate(dayjs(start).format('YYYY-MM-DD'))}
@@ -177,7 +210,7 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
           })
           track('Time Box: Select Event')
         }}
-        eventContent={(info) => <TheCalendarEvent info={info} />}
+        eventContent={(info) => <TheCalendarEvent info={info} validateSchedule={validateSchedule} />}
         views={{
           timeGridOneDay: {
             type: 'timeGrid',
@@ -206,9 +239,20 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
           },
         }}
       />
+      {editingHours && (
+        <WorkingHoursModal
+          initial={savedHours}
+          onClose={() => setEditingHours(false)}
+          onSave={(draft) => {
+            setSettings('timeBoxWorkingHours', JSON.stringify(draft))
+            setEditingHours(false)
+          }}
+        />
+      )}
       {createTaskModal.open ? (
         <TaskModal
           open={createTaskModal.open}
+          validateSchedule={validateSchedule}
           onOk={() => {
             setCreateTaskModal({ open: false })
           }}

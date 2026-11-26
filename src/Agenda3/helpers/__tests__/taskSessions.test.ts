@@ -25,6 +25,7 @@ import {
   validateSessions,
   type PlannedSession,
 } from '../taskSessions'
+import { DEFAULT_WORKING_HOURS, getWorkingHours, validateWorkingHours } from '../workingHours'
 
 const session = (id: string, start: string, minutes = 60): PlannedSession => ({
   id,
@@ -165,6 +166,53 @@ test('adding, moving, resizing and removing sessions preserves the block and rel
   expect(block.content).not.toContain('SCHEDULED:')
   expect(parseAgendaDrawer(block.content)?.sessions).toEqual([])
   expect((await transformBlockToAgendaEntity(block, { isInitialized: true }, [])).start).toBeUndefined()
+})
+
+test('Time Box validates the actual saved duration and preserves existing out-of-hours sessions', async () => {
+  const { block, update } = mockBlock()
+  const validate = validateWorkingHours(
+    getWorkingHours({ ...DEFAULT_WORKING_HOURS, enabled: true })!,
+    () => 'outside working hours',
+  )
+  const initial = await transformBlockToAgendaEntity(block, { isInitialized: true }, [])
+  const add = { type: 'add', id: 'new', start: dayjs('2026-11-24T09:30') } as const
+  await expect(updateBlockSessions('task', add, validate)).rejects.toThrow('outside working hours')
+  expect(update).not.toHaveBeenCalled()
+
+  await updateTaskBlock({ ...initial, title: 'Renamed', projectId: 'page' }, initial, validate)
+  await updateBlockSessions('task', { ...add, start: dayjs('2026-11-24T09:00') }, validate)
+  const move = { type: 'update', ...session('new', '2026-11-24T09:15') } as const
+  await expect(updateBlockSessions('task', move, validate)).rejects.toThrow('outside working hours')
+  expect(parseAgendaDrawer(block.content)?.sessions?.map(({ id, start }) => [id, start.format('HH:mm')])).toEqual([
+    ['new', '09:00'],
+    ['scheduled', '13:00'],
+  ])
+  await updateBlockSessions('task', move)
+  expect(parseAgendaDrawer(block.content)?.sessions?.[0].start.format('HH:mm')).toBe('09:15')
+})
+
+test('a Time Box task form checks the normalized series before inserting a block', async () => {
+  mockBlock()
+  const validate = validateWorkingHours(getWorkingHours({ ...DEFAULT_WORKING_HOURS, enabled: true })!, (start) =>
+    start.format('YYYY-MM-DD'),
+  )
+  const create = (recurrence: TaskRecurrence) =>
+    createTaskBlock(
+      {
+        title: 'Series',
+        allDay: false,
+        projectId: 'page',
+        sessions: [session('first', '2026-11-27T08:00')],
+        recurrence,
+      },
+      validate,
+    )
+  await expect(
+    create({ frequency: 'week', weekdays: ['SA'], interval: 1, end: { type: 'after', count: 1 } }),
+  ).rejects.toThrow('2026-11-28')
+  expect(logseq.Editor.insertBlock).not.toHaveBeenCalled()
+  await create({ frequency: 'week', weekdays: ['MO'], interval: 1, end: { type: 'after', count: 1 } })
+  expect(logseq.Editor.insertBlock).toHaveBeenCalledOnce()
 })
 
 test('validates duration, IDs, overlaps, adjacent and overnight sessions', () => {

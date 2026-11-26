@@ -68,6 +68,12 @@ Kanban cards show task-wide Est and Actual totals. Column totals count each task
 
 Existing timed tasks remain compatible and are not bulk migrated. Session edits store a JSON `sessions` list in the `:AGENDA:` drawer and mirror the earliest session into `SCHEDULED`. The final session can be removed without losing the task or its deadline. Sessions in the same schedule cannot overlap. Overnight and adjacent sessions are supported.
 
+### Working hours in Time Box
+
+Open **Working hours** with the gear in the Time Box header. Enable the restriction, choose **Workdays**, **Weekends**, or **Custom** weekdays, and set one or more work periods. For example, 08:00–10:00 and 18:00–20:00 leave an eight-hour gap. Time Box keeps the full day visible and crosshatches every blocked period.
+
+When you schedule from Time Box, each new or changed session must fit entirely within working hours. When you create or change a repeating schedule, Agenda checks the entire series. Existing sessions remain visible, and the main Calendar can still schedule at any time.
+
 ### Repeating time boxes
 
 Open a timed task or select a time range in Time Box or Calendar, then choose **Repeat** in the task editor. Pick daily, weekly, monthly by date or weekday, annually, or every weekday. **Custom** lets you set the interval, choose weekdays for a weekly schedule, and repeat indefinitely, through a date, or for a set number of occurrences.

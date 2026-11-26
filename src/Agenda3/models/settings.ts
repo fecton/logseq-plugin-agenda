@@ -21,6 +21,7 @@ export type Settings = {
     showFirstEventInCycleOnly?: boolean
     showTimeLog?: boolean
   }
+  timeBoxWorkingHours?: string
   filters?: Filter[]
   selectedFilters?: string[]
   experimental?: {

@@ -3,6 +3,7 @@ import { message } from 'antd'
 import dayjs from 'dayjs'
 
 import { getTaskSessions } from '../helpers/taskSessions'
+import type { ScheduleValidator } from '../helpers/workingHours'
 import useAgendaEntities from './useAgendaEntities'
 
 const leavingEvents = new Map<string, () => void>()
@@ -10,7 +11,7 @@ export function captureSessionLeave(info: { event: EventApi; revert: () => void 
   leavingEvents.set(info.event.id, info.revert)
 }
 
-export default function useSessionScheduling() {
+export default function useSessionScheduling(validateSchedule?: ScheduleValidator) {
   const { updateEntity, entities } = useAgendaEntities()
   return async (info: { event: EventApi; revert: () => void }, receive = false) => {
     const { event } = info
@@ -39,6 +40,7 @@ export default function useSessionScheduling() {
         await updateEntity({
           type: 'task-session',
           id: taskId,
+          ...(validateSchedule && { validateSchedule }),
           data: { type: 'add', id: crypto.randomUUID(), start: sessionStart },
         })
       } else if (event.extendedProps.eventKind === 'session') {
@@ -53,6 +55,7 @@ export default function useSessionScheduling() {
         await updateEntity({
           type: 'task-session',
           id: taskId,
+          ...(validateSchedule && { validateSchedule }),
           data: { type: 'update', id: event.extendedProps.sessionId, start: sessionStart, end: sessionEnd },
         })
       } else {
@@ -60,6 +63,7 @@ export default function useSessionScheduling() {
         await updateEntity({
           type: 'task-date',
           id: taskId,
+          ...(validateSchedule && { validateSchedule }),
           data: {
             start,
             allDay: event.allDay,

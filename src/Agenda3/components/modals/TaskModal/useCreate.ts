@@ -7,6 +7,7 @@ import { parseDurationString } from '@/Agenda3/helpers/block'
 import type { TaskRecurrence } from '@/Agenda3/helpers/taskRecurrence'
 import { validateSessions, type PlannedSession } from '@/Agenda3/helpers/taskSessions'
 import { getTaskTimeTotals } from '@/Agenda3/helpers/taskTime'
+import type { ScheduleValidator } from '@/Agenda3/helpers/workingHours'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { AgendaEntityDeadline } from '@/types/entity'
 import type { TaskPriority } from '@/types/taskPriority'
@@ -35,7 +36,11 @@ export type CreateTaskForm =
   | (BaseCreateTaskForm & {
       endDateVal: Dayjs
     })
-const useCreate = (initialData: Partial<CreateTaskForm> | null, messageApi: MessageInstance) => {
+const useCreate = (
+  initialData: Partial<CreateTaskForm> | null,
+  messageApi: MessageInstance,
+  validateSchedule?: ScheduleValidator,
+) => {
   const { t } = useTranslation()
   const { addNewEntity } = useAgendaEntities()
   const _initialData: CreateTaskForm = initialData
@@ -76,6 +81,7 @@ const useCreate = (initialData: Partial<CreateTaskForm> | null, messageApi: Mess
     }
     return addNewEntity({
       type: 'task',
+      ...(validateSchedule && { validateSchedule }),
       data: {
         allDay,
         start,

@@ -32,6 +32,7 @@ import {
   type PlannedSession,
   type SessionOperation,
 } from './taskSessions'
+import { getTaskSchedule, type ScheduleValidator } from './workingHours'
 
 /**
  * insert `<SCHEDULED: ...>` string into a block without any `<SCHEDULED: ...>` string
@@ -49,7 +50,10 @@ const insertScheduled = (content: string, scheduled: string) => {
 /**
  * Change scheduling only; estimates can only be changed through task editing.
  */
-export const updateBlockDateInfo = async (dateInfo: { uuid: string; allDay: boolean; start: Dayjs; end?: Dayjs }) => {
+export const updateBlockDateInfo = async (
+  dateInfo: { uuid: string; allDay: boolean; start: Dayjs; end?: Dayjs },
+  validateSchedule?: ScheduleValidator,
+) => {
   const { uuid, allDay, start } = dateInfo
   const originalBlock = await logseq.Editor.getBlock(uuid)
   if (!originalBlock) return Promise.reject(new Error('Block not found'))
@@ -80,6 +84,7 @@ export const updateBlockDateInfo = async (dateInfo: { uuid: string; allDay: bool
     if (previousEnd && previousDate) drawer.end = start.add(previousEnd.diff(dayjs(previousDate), 'day'), 'day')
   }
   const newContent2 = updateBlockAgendaDrawer(newContent, drawer)
+  if (validateSchedule) await checkBlockSchedule(originalBlock, newContent2, validateSchedule)
   await logseq.Editor.updateBlock(uuid, newContent2)
   return logseq.Editor.getBlock(uuid)
 }
@@ -108,6 +113,19 @@ function readBlockSessionTask(block: BlockEntity): AgendaEntity {
   } as AgendaEntity
 }
 
+async function checkBlockSchedule(
+  original: BlockEntity,
+  content: string,
+  validate: ScheduleValidator,
+  previous = readBlockSessionTask(original),
+) {
+  const previousContent = original.content
+  if (content === previousContent) return
+  await validate(getTaskSchedule(readBlockSessionTask({ ...original, content })), getTaskSchedule(previous))
+  const current = await logseq.Editor.getBlock(original.uuid)
+  if (current?.content !== previousContent) throw new Error('This task changed elsewhere. Reopen it and try again.')
+}
+
 function writeSessionsContent(content: string, sessions: PlannedSession[]) {
   const sorted = validateSessions(sessions)
   return updateBlockAgendaDrawer(updateBlockScheduled(content, { start: sorted[0]?.start, allDay: false }), {
@@ -123,7 +141,11 @@ function writeRecurringSchedule(content: string, sessions: PlannedSession[], rec
   })
 }
 
-export async function updateBlockSessions(uuid: string, operation: SessionOperation) {
+export async function updateBlockSessions(
+  uuid: string,
+  operation: SessionOperation,
+  validateSchedule?: ScheduleValidator,
+) {
   const block = await logseq.Editor.getBlock(uuid)
   if (!block) throw new Error('Block not found')
   const task = readBlockSessionTask(block)
@@ -131,7 +153,9 @@ export async function updateBlockSessions(uuid: string, operation: SessionOperat
   if (task.recurrence && operation.type !== 'remove')
     throw new Error('Use the task editor to change the recurring schedule.')
   const sessions = applySessionOperation(task, operation)
-  await logseq.Editor.updateBlock(uuid, writeRecurringSchedule(block.content, sessions, task.recurrence))
+  const content = writeRecurringSchedule(block.content, sessions, task.recurrence)
+  if (validateSchedule) await checkBlockSchedule(block, content, validateSchedule, task)
+  await logseq.Editor.updateBlock(uuid, content)
   return logseq.Editor.getBlock(uuid)
 }
 
@@ -268,7 +292,7 @@ export const deleteBlogTimeLog = async (uuid: string, index: number) => {
 /**
  * create task
  */
-export const createTaskBlock = async (taskInfo: CreateAgendaTask) => {
+export const createTaskBlock = async (taskInfo: CreateAgendaTask, validateSchedule?: ScheduleValidator) => {
   if (taskInfo.sessions === undefined && taskInfo.start && !taskInfo.allDay && !taskInfo.end) {
     taskInfo = { ...taskInfo, sessions: getTaskSessions(taskInfo) }
   }
@@ -278,6 +302,7 @@ export const createTaskBlock = async (taskInfo: CreateAgendaTask) => {
     if (taskInfo.recurrence) sessions = validateSessions(validateRecurringSchedule(sessions, taskInfo.recurrence))
     taskInfo = { ...taskInfo, sessions, start: sessions[0]?.start, allDay: false, end: undefined }
   }
+  if (validateSchedule) await validateSchedule(getTaskSchedule(taskInfo))
   const { title, allDay, start, deadline, end, estimatedTime, projectId, bindObjectiveId, size, priority } = taskInfo
 
   const AGENDA_DRAWER = genAgendaDrawerText({
@@ -327,7 +352,11 @@ export function generateTimeLogText({ start, end }: { start: Dayjs; end: Dayjs }
 /**
  * update task
  */
-export const updateTaskBlock = async (taskInfo: AgendaEntity & { projectId?: string }, originalTask?: AgendaEntity) => {
+export const updateTaskBlock = async (
+  taskInfo: AgendaEntity & { projectId?: string },
+  originalTask?: AgendaEntity,
+  validateSchedule?: ScheduleValidator,
+) => {
   const {
     id,
     title,
@@ -425,6 +454,7 @@ export const updateTaskBlock = async (taskInfo: AgendaEntity & { projectId?: str
     content = writeRecurringSchedule(content, sessions, recurrence)
   }
   if (changed(timeLogs ?? [], originalTask?.timeLogs ?? [])) content = updateBlockTimeLogText(content, timeLogs)
+  if (validateSchedule) await checkBlockSchedule(originalBlock, content, validateSchedule, latest)
   await updateBlock(id, content)
 
   const page = await logseq.Editor.getPage(originalBlock.page.id)

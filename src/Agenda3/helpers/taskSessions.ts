@@ -127,7 +127,7 @@ export function applySessionOperation(task: AgendaEntity, operation: SessionOper
   )
 }
 
-const sameSession = (a?: PlannedSession, b?: PlannedSession) =>
+export const sameSession = (a?: PlannedSession, b?: PlannedSession) =>
   a?.id === b?.id && a?.start.valueOf() === b?.start.valueOf() && a?.end.valueOf() === b?.end.valueOf()
 
 /** Merge only edited sessions, preserving unrelated sessions added while the editor was open. */

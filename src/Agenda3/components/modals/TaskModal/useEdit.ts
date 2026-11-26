@@ -8,6 +8,7 @@ import { genDurationString, parseDurationString } from '@/Agenda3/helpers/block'
 import type { TaskRecurrence } from '@/Agenda3/helpers/taskRecurrence'
 import { getTaskSessions, serializeSessions, validateSessions } from '@/Agenda3/helpers/taskSessions'
 import { getTaskTimeTotals } from '@/Agenda3/helpers/taskTime'
+import type { ScheduleValidator } from '@/Agenda3/helpers/workingHours'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { AgendaEntity, AgendaEntityDeadline } from '@/types/entity'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
@@ -58,7 +59,11 @@ const SessionFormSchema = object({
 const EditFormSchema = union([StartFormSchema, DeadlineFormSchema, SessionFormSchema])
 type EditTaskForm = Output<typeof EditFormSchema>
 type EditTaskFormNoValidation = Partial<EditTaskForm> & { recurrence?: TaskRecurrence }
-const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) => {
+const useEdit = (
+  initialTask: AgendaEntity | null,
+  messageApi: MessageInstance,
+  validateSchedule?: ScheduleValidator,
+) => {
   const { t } = useTranslation()
   const { updateEntity } = useAgendaEntities()
   const initialFormData = {
@@ -140,6 +145,7 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
       type: 'task',
       id: initialTask.id,
       originalTask: initialTask,
+      ...(validateSchedule && { validateSchedule }),
       data: {
         ...initialTask,
         ...result.output,

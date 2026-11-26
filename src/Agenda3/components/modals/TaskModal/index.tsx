@@ -15,6 +15,7 @@ import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
 import { getTaskSessions } from '@/Agenda3/helpers/taskSessions'
 import { track } from '@/Agenda3/helpers/umami'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
+import type { ScheduleValidator } from '@/Agenda3/helpers/workingHours'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import usePages from '@/Agenda3/hooks/usePages'
 import { logseqAtom } from '@/Agenda3/models/logseq'
@@ -45,6 +46,7 @@ const TaskModal = ({
   onCancel,
   onDelete,
   triggerClassName,
+  validateSchedule,
 }: {
   open?: boolean
   onCancel?: () => void
@@ -52,6 +54,7 @@ const TaskModal = ({
   onDelete?: (taskId: string) => void
   children?: React.ReactNode
   triggerClassName?: string
+  validateSchedule?: ScheduleValidator
   info:
     | {
         type: 'create'
@@ -81,8 +84,8 @@ const TaskModal = ({
 
   const { deleteEntity, updateEntity } = useAgendaEntities()
 
-  const createHookResult = useCreate(info.type === 'create' ? info.initialData : null, messageApi)
-  const editHookResult = useEdit(info.type === 'edit' ? info.initialTaskData : null, messageApi)
+  const createHookResult = useCreate(info.type === 'create' ? info.initialData : null, messageApi, validateSchedule)
+  const editHookResult = useEdit(info.type === 'edit' ? info.initialTaskData : null, messageApi, validateSchedule)
   const {
     formData,
     updateFormData,
