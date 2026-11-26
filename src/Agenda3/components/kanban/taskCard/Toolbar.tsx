@@ -9,7 +9,6 @@ import { IoRepeatOutline } from 'react-icons/io5'
 
 import { minutesToHHmm } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
-import { getTaskSessions } from '@/Agenda3/helpers/taskSessions'
 import { getTaskTimeTotals } from '@/Agenda3/helpers/taskTime'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
 import { logseqAtom } from '@/Agenda3/models/logseq'
@@ -34,9 +33,7 @@ const Toolbar = ({
 }) => {
   const { currentGraph } = useAtomValue(logseqAtom)
   const { t } = useTranslation()
-  const displayedStart = task.sessionDay
-    ? getTaskSessions(task).find((session) => session.start.format('YYYY-MM-DD') === task.sessionDay)?.start
-    : task.start
+  const displayedStart = task.daySessionStart ?? task.start
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-1">
@@ -62,7 +59,7 @@ const Toolbar = ({
           </span>
         )}
         {/* Recurring icon */}
-        {task.rrule || task.recurringPast ? <IoRepeatOutline className="text-gray-300" /> : null}
+        {task.rrule || task.recurrence || task.recurringPast ? <IoRepeatOutline className="text-gray-300" /> : null}
         {/* Objective icon */}
         {task.bindObjective ? (
           <Tooltip title={task.bindObjective.title}>
@@ -101,7 +98,11 @@ const Toolbar = ({
           showEmpty
           className="rounded bg-gray-100 px-1 py-0.5 text-gray-600 dark:bg-zinc-800 dark:text-gray-200"
         />
-        <TaskTimeBadges estimatedTime={task.estimatedTime} actualTime={getTaskTimeTotals(task).actualMinutes} />
+        <TaskTimeBadges
+          estimatedTime={task.estimatedTime}
+          actualTime={getTaskTimeTotals(task).actualMinutes}
+          repeating={Boolean(task.recurrence)}
+        />
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import { type Dayjs } from 'dayjs'
 
 import { type BlockFromQuery } from '@/Agenda3/helpers/task'
+import type { TaskRecurrence } from '@/Agenda3/helpers/taskRecurrence'
 import type { PlannedSession } from '@/Agenda3/helpers/taskSessions'
 import { type Filter } from '@/Agenda3/models/settings'
 
@@ -20,7 +21,10 @@ export type AgendaEntity = {
   start?: Dayjs // logseq scheduled
   sessions?: PlannedSession[]
   sessionsError?: string
+  recurrence?: TaskRecurrence
+  recurrenceError?: string
   sessionDay?: string // Kanban projection only; never persisted
+  daySessionStart?: Dayjs
   dayPlannedMinutes?: number
   daySessionCount?: number
   end?: Dayjs // from agenda drawer end

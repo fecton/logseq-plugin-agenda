@@ -24,6 +24,8 @@ export default function useSessionScheduling() {
     try {
       if (!task || !event.start) throw new Error('Task or session not found. Refresh Agenda and try again.')
       if (task.sessionsError) throw new Error(task.sessionsError)
+      if (task.recurrenceError) throw new Error(task.recurrenceError)
+      if (task.recurrence) throw new Error('Use the task editor to change the recurring schedule.')
       const start = dayjs(event.start)
       if (
         receive &&

@@ -1,8 +1,11 @@
+import dayjs from 'dayjs'
+
 import { transformAgendaTaskToCalendarEvent } from '@/Agenda3/helpers/fullCalendar'
 import { getRRuleInstance } from '@/Agenda3/helpers/task'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaTaskWithStart } from '@/types/task'
 
+import { getSessionOccurrences } from './taskRecurrence'
 import { getTaskSessions } from './taskSessions'
 
 export type TaskEndNotification = { id: string; title: string; end: number; sessionId?: string }
@@ -15,10 +18,13 @@ export const getDueTaskEndNotifications = (
 ): TaskEndNotification[] => {
   const due: TaskEndNotification[] = []
   for (const task of entities) {
-    if (task.sessionsError) continue
+    if (task.sessionsError || task.recurrenceError) continue
     if (!task.start || task.allDay || task.status === 'done' || task.objective || task.recurringPast) continue
-    const sessions = getTaskSessions(task)
-    if (sessions.length || task.sessions !== undefined) {
+    const baseSessions = getTaskSessions(task)
+    const sessions = task.recurrence
+      ? getSessionOccurrences(baseSessions, task.recurrence, { start: dayjs(since), end: dayjs(now + 1) })
+      : baseSessions
+    if (baseSessions.length || task.sessions !== undefined) {
       for (const session of sessions) {
         const end = session.end.valueOf()
         if (end > since && end <= now)

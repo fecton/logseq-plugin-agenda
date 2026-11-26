@@ -12,6 +12,7 @@ import { RiCheckboxBlankCircleLine, RiDeleteBin4Line } from 'react-icons/ri'
 import { parseDurationString } from '@/Agenda3/helpers/block'
 import { minutesToHHmm } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
+import { getTaskSessions } from '@/Agenda3/helpers/taskSessions'
 import { track } from '@/Agenda3/helpers/umami'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
@@ -30,6 +31,7 @@ import TaskPrioritySelect from '../../forms/TaskPrioritySelect'
 import TaskSizeSelect from '../../forms/TaskSizeSelect'
 import LogseqLogo from '../../icons/LogseqLogo'
 import PageIcon from '../../icons/PageIcon'
+import Repeat from './Repeat'
 import Sessions from './Sessions'
 import TimeLogComponent from './TimeLog'
 import useCreate, { type CreateTaskForm } from './useCreate'
@@ -102,6 +104,16 @@ const TaskModal = ({
     (info.initialTaskData.rrule || info.initialTaskData.recurringPast || info.initialTaskData.rawBlock.repeated)
       ? true
       : false
+  const sessionError = info.type === 'edit' ? info.initialTaskData.sessionsError : undefined
+  const recurrenceError = info.type === 'edit' ? info.initialTaskData.recurrenceError : undefined
+  const sessionDuration = formData.estimatedTime ? parseDurationString(formData.estimatedTime) : undefined
+  const sessions = getTaskSessions({
+    sessions: formData.sessions,
+    estimatedTime: sessionDuration,
+    start,
+    allDay,
+    end: formData.endDateVal,
+  })
 
   const showStartTimeFormatter = allDay ? SHOW_DATE_FORMATTER : SHOW_DATETIME_FORMATTER
   const showDeadlineTimeFormatter = deadline?.allDay ? SHOW_DATE_FORMATTER : SHOW_DATETIME_FORMATTER
@@ -397,34 +409,33 @@ const TaskModal = ({
           </div>
         )}
         {/* ========= Start Date End ========= */}
-        {info.type === 'edit' && info.initialTaskData.sessionsError ? (
+        {sessionError || recurrenceError ? (
           <p role="alert" className="text-red-600 dark:text-red-400">
-            {info.initialTaskData.sessionsError}
+            {t(sessionError ?? recurrenceError ?? '')}
           </p>
         ) : null}
         {!formData.endDateVal && !editDisabled ? (
-          <Sessions
-            value={
-              formData.sessions ??
-              (start && !allDay
-                ? [
-                    {
-                      id: 'scheduled',
-                      start,
-                      end: start.add(
-                        formData.estimatedTime ? parseDurationString(formData.estimatedTime) : 30,
-                        'minute',
-                      ),
-                    },
-                  ]
-                : [])
-            }
-            duration={formData.estimatedTime ? parseDurationString(formData.estimatedTime) : 30}
-            disabled={saving || (info.type === 'edit' && Boolean(info.initialTaskData.sessionsError))}
-            selectedId={info.type === 'edit' ? info.sessionId : undefined}
-            open={Boolean(_open)}
-            onChange={(sessions) => updateFormData({ sessions })}
-          />
+          <>
+            <Sessions
+              value={sessions}
+              duration={sessionDuration}
+              disabled={saving || Boolean(sessionError || recurrenceError)}
+              repeating={Boolean(formData.recurrence)}
+              selectedId={info.type === 'edit' ? info.sessionId : undefined}
+              open={Boolean(_open)}
+              onChange={(sessions) =>
+                updateFormData({ sessions, recurrence: sessions.length ? formData.recurrence : undefined })
+              }
+            />
+            {_open && sessions.length > 0 && !sessionError && !recurrenceError ? (
+              <Repeat
+                sessions={sessions}
+                value={formData.recurrence}
+                disabled={saving}
+                onChange={(recurrence) => updateFormData({ recurrence })}
+              />
+            ) : null}
+          </>
         ) : null}
 
         {/* ========= Estimated Time Start ========= */}
@@ -495,7 +506,9 @@ const TaskModal = ({
               </div>
               <p className="max-w-[320px] px-3 py-1 text-xs text-gray-500 dark:text-gray-400">
                 {t(
-                  'Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.',
+                  formData.recurrence
+                    ? 'Actual Time counts each base session once. Manual logs are added even when they overlap a time box.'
+                    : 'Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.',
                 )}
               </p>
               {editHookResult.formData.timeLogs?.map((timeLog, index) => (

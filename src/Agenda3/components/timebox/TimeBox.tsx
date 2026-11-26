@@ -38,6 +38,8 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
   const onEventScheduleUpdate = useSessionScheduling()
   const recentTasks = useAtomValue(calendarTasksAtom)
   const now = dayjs()
+  const [visibleDate, setVisibleDate] = useState(() => now.format('YYYY-MM-DD'))
+  const visibleStart = dayjs(visibleDate)
   const calendarEvents = recentTasks
     // TODO: 补充 deadline 任务的处理后移除次过滤器
     .filter((task) => !settings.viewOptions?.hideCompleted || task.status !== 'done')
@@ -46,6 +48,7 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
         showFirstEventInCycleOnly: settings.viewOptions?.showFirstEventInCycleOnly,
         showTimeLog: settings.viewOptions?.showTimeLog,
         groupType,
+        range: { start: visibleStart, end: visibleStart.add(1, 'day') },
       }),
     )
     .flat()
@@ -104,11 +107,23 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
           <MdSchedule className="text-lg" /> Time Box
         </div>
         <div className="mr-4 flex opacity-0 transition-opacity group-hover/root:opacity-100">
-          <Button size="small" type="text" icon={<LeftOutlined />} onClick={() => onClickNav('prev')} />
+          <Button
+            size="small"
+            type="text"
+            aria-label={t('Previous Time Box day')}
+            icon={<LeftOutlined />}
+            onClick={() => onClickNav('prev')}
+          />
           <Button size="small" type="text" onClick={() => onClickNav('today')}>
             {t('Today')}
           </Button>
-          <Button size="small" type="text" icon={<RightOutlined />} onClick={() => onClickNav('next')} />
+          <Button
+            size="small"
+            type="text"
+            aria-label={t('Next Time Box day')}
+            icon={<RightOutlined />}
+            onClick={() => onClickNav('next')}
+          />
         </div>
       </div>
       <FullCalendar
@@ -129,6 +144,7 @@ const TimeBox = ({ onChangeType }: { onChangeType?: () => void }) => {
         ]}
         headerToolbar={false}
         initialView="timeGridOneDay"
+        datesSet={({ start }) => setVisibleDate(dayjs(start).format('YYYY-MM-DD'))}
         defaultTimedEventDuration="00:30"
         plugins={[timeGridPlugin, interactionPlugin, rrulePlugin]}
         eventTimeFormat={FULL_CALENDAR_24HOUR_FORMAT}

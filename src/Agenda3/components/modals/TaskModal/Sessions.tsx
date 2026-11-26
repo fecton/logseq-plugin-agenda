@@ -10,6 +10,7 @@ export default function Sessions({
   onChange,
   duration = 30,
   disabled,
+  repeating,
   selectedId,
   open,
 }: {
@@ -17,6 +18,7 @@ export default function Sessions({
   onChange: (value: PlannedSession[]) => void
   duration?: number
   disabled?: boolean
+  repeating?: boolean
   selectedId?: string
   open?: boolean
 }) {
@@ -53,7 +55,11 @@ export default function Sessions({
         </Button>
       </div>
       <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-        {t('Sessions manage this task’s schedule. Each box can be moved separately.')}
+        {t(
+          repeating
+            ? 'Each session repeats as part of this task’s schedule.'
+            : 'Sessions manage this task’s schedule. Each box can be moved separately.',
+        )}
       </p>
       {value.map((session, index) => (
         <div

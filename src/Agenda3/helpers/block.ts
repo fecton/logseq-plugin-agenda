@@ -21,6 +21,7 @@ import { updateBlock } from '@/util/logseq'
 
 import { secondsToHHmmss } from './fullCalendar'
 import type { BlockFromQuery } from './task'
+import { parseTaskRecurrence, validateRecurringSchedule, type TaskRecurrence } from './taskRecurrence'
 import {
   applySessionOperation,
   getTaskSessions,
@@ -54,6 +55,8 @@ export const updateBlockDateInfo = async (dateInfo: { uuid: string; allDay: bool
   if (!originalBlock) return Promise.reject(new Error('Block not found'))
   const existingDrawer = parseAgendaDrawer(originalBlock.content)
   if (existingDrawer?.sessionsError) throw new Error(existingDrawer.sessionsError)
+  if (existingDrawer?.recurrenceError) throw new Error(existingDrawer.recurrenceError)
+  if (existingDrawer?.recurrence) throw new Error('Use the task editor to change the recurring schedule.')
   if (existingDrawer?.sessions !== undefined) throw new Error('Use Sessions to change this task’s schedule.')
 
   const scheduledText = `SCHEDULED: <${start.format(allDay ? SCHEDULED_DATE_FORMATTER : SCHEDULED_DATETIME_FORMATTER)}>`
@@ -99,6 +102,8 @@ function readBlockSessionTask(block: BlockEntity): AgendaEntity {
     estimatedTime: drawer?.estimated,
     sessions: drawer?.sessions,
     sessionsError: drawer?.sessionsError,
+    recurrence: drawer?.recurrence,
+    recurrenceError: drawer?.recurrenceError,
     objective: drawer?.objective,
   } as AgendaEntity
 }
@@ -111,12 +116,22 @@ function writeSessionsContent(content: string, sessions: PlannedSession[]) {
   })
 }
 
+function writeRecurringSchedule(content: string, sessions: PlannedSession[], recurrence?: TaskRecurrence) {
+  const normalized = recurrence && sessions.length ? validateRecurringSchedule(sessions, recurrence) : sessions
+  return updateBlockAgendaDrawer(writeSessionsContent(content, normalized), {
+    recurrence: normalized.length ? recurrence : undefined,
+  })
+}
+
 export async function updateBlockSessions(uuid: string, operation: SessionOperation) {
   const block = await logseq.Editor.getBlock(uuid)
   if (!block) throw new Error('Block not found')
   const task = readBlockSessionTask(block)
+  if (task.recurrenceError) throw new Error(task.recurrenceError)
+  if (task.recurrence && operation.type !== 'remove')
+    throw new Error('Use the task editor to change the recurring schedule.')
   const sessions = applySessionOperation(task, operation)
-  await logseq.Editor.updateBlock(uuid, writeSessionsContent(block.content, sessions))
+  await logseq.Editor.updateBlock(uuid, writeRecurringSchedule(block.content, sessions, task.recurrence))
   return logseq.Editor.getBlock(uuid)
 }
 
@@ -127,6 +142,8 @@ export const deleteBlockDateInfo = async (uuid: string, day?: string) => {
   const { content, scheduled } = originalBlock
   const drawer = parseAgendaDrawer(content)
   if (drawer?.sessionsError) throw new Error(drawer.sessionsError)
+  if (drawer?.recurrenceError) throw new Error(drawer.recurrenceError)
+  if (drawer?.recurrence) throw new Error('Use the task editor to change the recurring schedule.')
 
   if (day) {
     if (originalBlock.marker === 'DONE') throw new Error('Only open tasks can be moved to Backlog.')
@@ -255,8 +272,10 @@ export const createTaskBlock = async (taskInfo: CreateAgendaTask) => {
   if (taskInfo.sessions === undefined && taskInfo.start && !taskInfo.allDay && !taskInfo.end) {
     taskInfo = { ...taskInfo, sessions: getTaskSessions(taskInfo) }
   }
-  if (taskInfo.sessions !== undefined) {
-    const sessions = validateSessions(taskInfo.sessions)
+  if (taskInfo.recurrence && taskInfo.end) throw new Error('Add a timed session to repeat this task.')
+  if (taskInfo.sessions !== undefined || taskInfo.recurrence) {
+    let sessions = validateSessions(taskInfo.sessions ?? [])
+    if (taskInfo.recurrence) sessions = validateSessions(validateRecurringSchedule(sessions, taskInfo.recurrence))
     taskInfo = { ...taskInfo, sessions, start: sessions[0]?.start, allDay: false, end: undefined }
   }
   const { title, allDay, start, deadline, end, estimatedTime, projectId, bindObjectiveId, size, priority } = taskInfo
@@ -268,6 +287,7 @@ export const createTaskBlock = async (taskInfo: CreateAgendaTask) => {
     size,
     priority,
     sessions: taskInfo.sessions,
+    recurrence: taskInfo.recurrence,
   })
   // const
   const content = [
@@ -329,11 +349,14 @@ export const updateTaskBlock = async (taskInfo: AgendaEntity & { projectId?: str
   // Apply only edited fields to the latest block. A date edit must not rewrite notes,
   // workflow markers, repeating deadlines, logs or metadata changed outside Agenda.
   const changed = (a: unknown, b: unknown) => !originalTask || JSON.stringify(a) !== JSON.stringify(b)
+  const startChanged = changed(start, originalTask?.start)
+  const startDetailsChanged = startChanged || changed(allDay, originalTask?.allDay)
+  const endChanged = changed(end, originalTask?.end)
   let content = originalBlock.content
   if (changed(title, originalTask?.title) || changed(status, originalTask?.status)) {
     content = updateBlockTaskTitle(content, title, status)
   }
-  if (changed(start, originalTask?.start) || changed(allDay, originalTask?.allDay)) {
+  if (startDetailsChanged) {
     content = updateBlockScheduled(content, { start, allDay })
   }
   if (changed(deadline, originalTask?.deadline)) content = updateBlockDeadline(content, deadline)
@@ -341,8 +364,25 @@ export const updateTaskBlock = async (taskInfo: AgendaEntity & { projectId?: str
   // Freeze a legacy timed box before changing the estimate that used to define its length.
   // Read the latest block so a concurrent scheduling change is not overwritten.
   const latest = readBlockSessionTask(originalBlock)
+  const recurrenceChanged = 'recurrence' in taskInfo && changed(taskInfo.recurrence, originalTask?.recurrence)
+  const editedSessions = taskInfo.sessions
+  const sessionsChanged = editedSessions !== undefined && changed(editedSessions, originalTask?.sessions)
+  const scheduleChanged = startDetailsChanged || endChanged
+  if ((recurrenceChanged || sessionsChanged || scheduleChanged) && latest.recurrenceError)
+    throw new Error(latest.recurrenceError)
+  if (latest.recurrence && scheduleChanged && !sessionsChanged && !recurrenceChanged)
+    throw new Error('Use the task editor to change the recurring schedule.')
+  if (
+    recurrenceChanged &&
+    originalTask &&
+    changed(latest.recurrence, originalTask.recurrence) &&
+    changed(latest.recurrence, taskInfo.recurrence)
+  ) {
+    throw new Error('The repeat rule changed elsewhere. Reopen the task and try again.')
+  }
   const frozenSessions =
     taskInfo.sessions === undefined &&
+    !recurrenceChanged &&
     start &&
     !allDay &&
     !end &&
@@ -352,13 +392,13 @@ export const updateTaskBlock = async (taskInfo: AgendaEntity & { projectId?: str
       ? getTaskSessions(latest)
       : []
   if (changed(estimatedTime, originalTask?.estimatedTime)) drawer.estimated = estimatedTime
-  if (changed(end, originalTask?.end)) drawer.end = end
+  if (endChanged) drawer.end = end
   if (changed(bindObjectiveId, originalTask?.bindObjectiveId)) drawer.bindObjectiveId = bindObjectiveId
   if ('size' in taskInfo && changed(size, originalTask?.size)) drawer.size = size
   if ('priority' in taskInfo && changed(priority, originalTask?.priority)) drawer.priority = priority
   content = updateBlockAgendaDrawer(content, drawer)
   if (frozenSessions.length) {
-    const shift = start && latest.start && changed(start, originalTask?.start) ? start.diff(latest.start, 'minute') : 0
+    const shift = start && latest.start && startChanged ? start.diff(latest.start, 'minute') : 0
     content = writeSessionsContent(
       content,
       frozenSessions.map((session) => ({
@@ -368,14 +408,21 @@ export const updateTaskBlock = async (taskInfo: AgendaEntity & { projectId?: str
       })),
     )
   }
-  if (taskInfo.sessions !== undefined) {
+  if (recurrenceChanged || sessionsChanged) {
     if (latest.sessionsError) throw new Error(latest.sessionsError)
-    const sessions = mergeSessionEdits(
-      getTaskSessions(latest),
-      originalTask ? getTaskSessions(originalTask) : getTaskSessions(latest),
-      taskInfo.sessions,
-    )
-    content = writeSessionsContent(content, sessions)
+    const currentSessions = getTaskSessions(latest)
+    const sessions =
+      sessionsChanged && editedSessions
+        ? mergeSessionEdits(
+            currentSessions,
+            originalTask ? getTaskSessions(originalTask) : currentSessions,
+            editedSessions,
+          )
+        : currentSessions
+    const recurrence = recurrenceChanged ? taskInfo.recurrence : latest.recurrence
+    if (recurrence && (latest.rawBlock.repeated || latest.objective || end || (recurrenceChanged && !sessions.length)))
+      throw new Error('Add a timed session to repeat this task.')
+    content = writeRecurringSchedule(content, sessions, recurrence)
   }
   if (changed(timeLogs ?? [], originalTask?.timeLogs ?? [])) content = updateBlockTimeLogText(content, timeLogs)
   await updateBlock(id, content)
@@ -477,6 +524,8 @@ export function genDurationString(minutes: number): string {
 type AgendaDrawer = {
   sessions?: PlannedSession[]
   sessionsError?: string
+  recurrence?: TaskRecurrence
+  recurrenceError?: string
   estimated?: number
   end?: Dayjs
   objective?: AgendaEntityObjective
@@ -502,38 +551,54 @@ export function parseAgendaDrawer(blockContent: string): AgendaDrawer | null {
       const separator = line.indexOf(':')
       return [line.slice(0, separator).trim(), line.slice(separator + 1).trim()]
     })
-  return properties.length > 0
-    ? properties.reduce((acc, cur) => {
-        if (cur[0] === 'sessions') {
-          try {
-            return { ...acc, sessions: parseSessions(cur[1]) }
-          } catch {
-            return {
-              ...acc,
-              sessionsError: 'Invalid sessions data. Repair the sessions field in Logseq before changing the schedule.',
-            }
-          }
+  if (!properties.length) return null
+  const drawer = properties.reduce((acc, cur) => {
+    if (cur[0] === 'sessions') {
+      try {
+        return { ...acc, sessions: parseSessions(cur[1]) }
+      } catch {
+        return {
+          ...acc,
+          sessionsError: 'Invalid sessions data. Repair the sessions field in Logseq before changing the schedule.',
         }
-        if (cur[0] === 'estimated') return { ...acc, estimated: parseDurationString(cur[1]) }
-        if (cur[0] === 'end') return { ...acc, end: dayjs(cur[1], DATE_FORMATTER) }
-        if (cur[0] === 'objective') {
-          // week-2023-46
-          const [type, year, number] = cur[1].split('-')
-          return {
-            ...acc,
-            objective: {
-              type: type as AgendaEntityObjective['type'],
-              year: Number(year),
-              number: Number(number),
-            },
-          }
-        }
-        if (cur[0] === 'bindObjectiveId') return { ...acc, bindObjectiveId: cur[1] }
-        if (cur[0] === 'size') return { ...acc, size: parseTaskSize(cur[1]) }
-        if (cur[0] === 'priority') return { ...acc, priority: parseTaskPriority(cur[1]) }
-        return { ...acc, [cur[0]]: cur[1] }
-      }, {} as AgendaDrawer)
-    : null
+      }
+    }
+    if (cur[0] === 'recurrence') {
+      try {
+        return { ...acc, recurrence: parseTaskRecurrence(cur[1]) }
+      } catch {
+        return { ...acc, recurrenceError: 'Invalid recurrence data. Repair the recurrence field in Logseq.' }
+      }
+    }
+    if (cur[0] === 'estimated') return { ...acc, estimated: parseDurationString(cur[1]) }
+    if (cur[0] === 'end') return { ...acc, end: dayjs(cur[1], DATE_FORMATTER) }
+    if (cur[0] === 'objective') {
+      // week-2023-46
+      const [type, year, number] = cur[1].split('-')
+      return {
+        ...acc,
+        objective: {
+          type: type as AgendaEntityObjective['type'],
+          year: Number(year),
+          number: Number(number),
+        },
+      }
+    }
+    if (cur[0] === 'bindObjectiveId') return { ...acc, bindObjectiveId: cur[1] }
+    if (cur[0] === 'size') return { ...acc, size: parseTaskSize(cur[1]) }
+    if (cur[0] === 'priority') return { ...acc, priority: parseTaskPriority(cur[1]) }
+    return { ...acc, [cur[0]]: cur[1] }
+  }, {} as AgendaDrawer)
+  if (drawer.recurrence) {
+    try {
+      if (drawer.end || drawer.objective) throw new Error('Recurring schedules require timed sessions.')
+      validateRecurringSchedule(drawer.sessions ?? [], drawer.recurrence)
+    } catch {
+      drawer.recurrence = undefined
+      drawer.recurrenceError = 'Invalid recurrence data. Repair the recurrence field in Logseq.'
+    }
+  }
+  return drawer
 }
 /**
  * generate agenda drawer text
@@ -563,6 +628,8 @@ export function genAgendaDrawerText(drawer: AgendaDrawer): string {
         if (!valueText) return null
       } else if (key === 'sessions') {
         valueText = serializeSessions(originalVal)
+      } else if (key === 'recurrence') {
+        valueText = JSON.stringify(originalVal)
       }
       return `${key}: ${valueText}`
     })

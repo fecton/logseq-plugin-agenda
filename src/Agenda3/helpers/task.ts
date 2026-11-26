@@ -14,6 +14,7 @@ import { genDays } from '@/util/util'
 
 import { parseAgendaDrawer } from './block'
 import { transformPageToProject } from './project'
+import { getSessionOccurrences } from './taskRecurrence'
 import { getTaskSessions } from './taskSessions'
 import { getTaskTimeTotals } from './taskTime'
 
@@ -132,6 +133,7 @@ export const getAgendaEntities = async (settings: Settings, options: { scheduled
           start: pastTaskEnd.subtract(spanTime, 'minute'),
           recurringPast: true,
           rrule: undefined,
+          ...(task.recurrence ? { recurrence: undefined } : {}),
           repeated: false,
           status: 'done',
           actualTime: 0,
@@ -291,6 +293,8 @@ export const transformBlockToAgendaEntity = async (
     priority: agendaDrawer?.priority,
     sessions: agendaDrawer?.sessions,
     sessionsError: agendaDrawer?.sessionsError,
+    ...(agendaDrawer?.recurrence && !block.repeated ? { recurrence: agendaDrawer.recurrence } : {}),
+    ...(agendaDrawer?.recurrenceError ? { recurrenceError: agendaDrawer.recurrenceError } : {}),
     rawBlock: block,
   }
   return { ...task, actualTime: getTaskTimeTotals(task).actualMinutes }
@@ -376,26 +380,33 @@ export const transformTasksToKanbanTasks = (
   const { showFirstEventInCycleOnly = false } = options
   const today = dayjs()
   const range = options.range
+  const [recentStart, recentEnd] = getRecentDaysRange()
+  const recurrenceRange = range ?? { start: recentStart.startOf('day'), end: recentEnd.add(1, 'day').startOf('day') }
   const inRange = (date: Dayjs) => !range || (!date.isBefore(range.start, 'day') && date.isBefore(range.end, 'day'))
   return tasks
     .map((task) => {
       const { allDay, end, start } = task
       const sessions = getTaskSessions(task)
       if (sessions.length) {
-        const days = [
-          ...new Set(
-            sessions.filter((session) => inRange(session.start)).map((session) => session.start.format('YYYY-MM-DD')),
-          ),
-        ]
-        return days.map((sessionDay) => {
-          const daily = sessions.filter((session) => session.start.format('YYYY-MM-DD') === sessionDay)
-          return {
+        const visibleSessions = task.recurrence
+          ? getSessionOccurrences(sessions, task.recurrence, recurrenceRange, showFirstEventInCycleOnly)
+          : sessions
+        const days = new Map<string, KanBanItem>()
+        for (const session of visibleSessions) {
+          if (!inRange(session.start) || (task.recurrence && session.start.isBefore(recurrenceRange.start, 'day')))
+            continue
+          const sessionDay = session.start.format('YYYY-MM-DD')
+          const daily = days.get(sessionDay)
+          const minutes = session.end.diff(session.start, 'minute')
+          days.set(sessionDay, {
             ...task,
             sessionDay,
-            daySessionCount: daily.length,
-            dayPlannedMinutes: daily.reduce((sum, session) => sum + session.end.diff(session.start, 'minute'), 0),
-          }
-        })
+            daySessionStart: daily?.daySessionStart ?? session.start,
+            daySessionCount: (daily?.daySessionCount ?? 0) + 1,
+            dayPlannedMinutes: (daily?.dayPlannedMinutes ?? 0) + minutes,
+          })
+        }
+        return [...days.values()]
       }
 
       // splitting multi-days task into single-day tasks
@@ -419,9 +430,7 @@ export const transformTasksToKanbanTasks = (
       // show recurring task
       if (task.rrule) {
         const rruleInstance = getRRuleInstance(showFirstEventInCycleOnly ? { ...task.rrule, count: 1 } : task.rrule)
-        const [recentStart, recentEnd] = getRecentDaysRange()
-        const startDay = range?.start ?? recentStart.startOf('day')
-        const endDay = range?.end ?? recentEnd.add(1, 'day').startOf('day')
+        const { start: startDay, end: endDay } = recurrenceRange
         const dates = rruleInstance
           .between(startDay.toDate(), endDay.toDate(), true)
           .filter((date) => dayjs(date).isBefore(endDay))

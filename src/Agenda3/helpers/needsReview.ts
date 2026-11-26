@@ -27,7 +27,7 @@ export function classifyNeedsReview(entities: AgendaEntity[], now: Dayjs) {
       : task.start
       ? task.end ?? (task.allDay ? task.start : task.start.add(task.estimatedTime ?? DEFAULT_ESTIMATED_TIME, 'minute'))
       : undefined
-    const missedSchedule = scheduledEnd?.isValid() && scheduledEnd.isBefore(today, 'day')
+    const missedSchedule = !task.recurrence && scheduledEnd?.isValid() && scheduledEnd.isBefore(today, 'day')
     const missedDeadline = task.deadline?.value.isValid() && task.deadline.value.isBefore(today, 'day')
     if (missedSchedule || missedDeadline) {
       const reasons: OverdueTask['reasons'] = []

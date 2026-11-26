@@ -58,7 +58,7 @@ Keyboard shortcuts: **T** switches Tasks/Calendar, **W** toggles Month/Week (sel
 
 ## Planned sessions
 
-One task can have several timed sessions. Dragging its Kanban card into Time Box or Calendar **adds a session**; dragging or resizing an existing box changes **only that session**. The task editor's **Sessions** section lets you add, change, or remove individual sessions. Removing a session does not delete the task.
+One task can have several timed sessions. For a one-time schedule, dragging its Kanban card into Time Box or Calendar **adds a session**, and dragging or resizing an existing box updates that session. The task editor's **Sessions** section lets you add, change, or remove individual sessions. Removing a session does not delete the task.
 
 Kanban shows one card on each session-start day, with a session count and that day's planned duration. Moving a card between days moves sessions starting on its source day together. Priority, Size, task completion, and notes remain shared. Each session has its own end notification; completing the task stops all its notifications.
 
@@ -66,7 +66,15 @@ Kanban shows one card on each session-start day, with a session count and that d
 
 Kanban cards show task-wide Est and Actual totals. Column totals count each task's estimate only on its earliest session-start day (otherwise its scheduled or deadline day), and each session or log's full duration on its local start day, including overnight entries. Unset estimates display **—**. Changing a legacy task's estimate preserves the original box duration by saving it as a session; there is no bulk migration.
 
-Existing timed tasks remain compatible and are not bulk migrated. Session edits store a JSON `sessions` list in the `:AGENDA:` drawer and mirror the earliest session into `SCHEDULED`; manage these tasks' schedules through Sessions. The final session can be removed without losing the task or its deadline. Same-task overlaps are rejected; overnight and adjacent sessions are supported. Recurring and multi-day all-day tasks retain their existing behavior.
+Existing timed tasks remain compatible and are not bulk migrated. Session edits store a JSON `sessions` list in the `:AGENDA:` drawer and mirror the earliest session into `SCHEDULED`. The final session can be removed without losing the task or its deadline. Sessions in the same schedule cannot overlap. Overnight and adjacent sessions are supported.
+
+### Repeating time boxes
+
+Open a timed task or select a time range in Time Box or Calendar, then choose **Repeat** in the task editor. Pick daily, weekly, monthly by date or weekday, annually, or every weekday. **Custom** lets you set the interval, choose weekdays for a weekly schedule, and repeat indefinitely, through a date, or for a set number of occurrences.
+
+All sessions repeat together. If the earliest session falls outside the selected weekdays, Agenda moves the schedule to the next matching day. The task keeps one deadline. Open any occurrence to edit the series, or choose **Does not repeat** to keep the base sessions as one-time boxes. Removing the final session also clears the rule. Native Logseq repeaters continue to be edited in Logseq.
+
+The task's **Actual Time** counts the base sessions once plus manual logs. Each day's Kanban total counts the sessions from occurrences that start on that day. Recurring timed sessions also support task-end notifications.
 
 ## Task priorities
 

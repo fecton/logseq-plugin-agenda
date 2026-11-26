@@ -2,7 +2,15 @@ import { useTranslation } from 'react-i18next'
 
 import { minutesToHHmm } from '@/Agenda3/helpers/fullCalendar'
 
-export default function TaskTimeBadges({ estimatedTime, actualTime }: { estimatedTime?: number; actualTime?: number }) {
+export default function TaskTimeBadges({
+  estimatedTime,
+  actualTime,
+  repeating,
+}: {
+  estimatedTime?: number
+  actualTime?: number
+  repeating?: boolean
+}) {
   const { t } = useTranslation()
   return (
     <span
@@ -14,7 +22,9 @@ export default function TaskTimeBadges({ estimatedTime, actualTime }: { estimate
       </span>
       <span
         title={t(
-          'Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.',
+          repeating
+            ? 'Actual Time counts each base session once. Manual logs are added even when they overlap a time box.'
+            : 'Actual Time includes future time boxes in full. Manual logs are added even when they overlap a time box.',
         )}
         aria-label={t('Actual Time')}
       >

@@ -1,8 +1,11 @@
+import dayjs from 'dayjs'
+
 import type { AgendaEntity } from '@/types/entity'
 
+import { getSessionOccurrences } from './taskRecurrence'
 import { getTaskSessions } from './taskSessions'
 
-export type TaskTimeInput = Parameters<typeof getTaskSessions>[0] & Pick<AgendaEntity, 'timeLogs'>
+export type TaskTimeInput = Parameters<typeof getTaskSessions>[0] & Pick<AgendaEntity, 'timeLogs' | 'recurrence'>
 export type TaskTimeTotals = { sessionMinutes?: number; manualLogMinutes: number; actualMinutes?: number }
 
 /** Actual is allocated session time plus manual logs, including future/overlapping log entries. */
@@ -13,7 +16,12 @@ export function getTaskTimeTotals(task: TaskTimeInput, day?: string): TaskTimeTo
     .filter((log) => !day || log.start.format('YYYY-MM-DD') === day)
     .reduce((sum, log) => sum + log.amount, 0)
   if (task.sessionsError) return { manualLogMinutes }
-  const sessionMinutes = getTaskSessions(task)
+  const sessions = getTaskSessions(task)
+  const dayStart = day && task.recurrence ? dayjs(day) : undefined
+  const displayedSessions = dayStart
+    ? getSessionOccurrences(sessions, task.recurrence, { start: dayStart, end: dayStart.add(1, 'day') })
+    : sessions
+  const sessionMinutes = displayedSessions
     .filter((session) => !day || session.start.format('YYYY-MM-DD') === day)
     .reduce((sum, session) => sum + session.end.diff(session.start, 'minute'), 0)
   return { sessionMinutes, manualLogMinutes, actualMinutes: sessionMinutes + manualLogMinutes }

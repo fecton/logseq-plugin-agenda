@@ -58,6 +58,7 @@ const Calendar = () => {
         showFirstEventInCycleOnly: settings.viewOptions?.showFirstEventInCycleOnly,
         showTimeLog: settings.viewOptions?.showTimeLog,
         groupType,
+        range: { start: dateView.visibleStart, end: dateView.visibleEnd },
       }),
     )
     .flat()

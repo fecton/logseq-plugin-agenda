@@ -1,6 +1,7 @@
 import type { EventContentArg } from '@fullcalendar/core'
 import { Dropdown, message } from 'antd'
 import dayjs from 'dayjs'
+import { useTranslation } from 'react-i18next'
 import { IoIosCheckmarkCircle } from 'react-icons/io'
 import { RiDeleteBin4Line, RiInboxUnarchiveLine } from 'react-icons/ri'
 
@@ -13,6 +14,7 @@ import TaskSizeBadge from '../TaskSizeBadge'
 import TaskModal from '../modals/TaskModal'
 
 const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
+  const { t } = useTranslation()
   const { updateEntity, deleteEntity, entities } = useAgendaEntities()
   const onDeleteTask = async (taskId: string) => {
     deleteEntity(taskId)
@@ -66,7 +68,7 @@ const TheCalendarEvent = ({ info }: { info: EventContentArg }) => {
             savedTask.eventKind === 'session'
               ? {
                   key: 'remove',
-                  label: 'Remove session',
+                  label: t(savedTask.recurrence ? 'Remove session from series' : 'Remove session'),
                   icon: <RiInboxUnarchiveLine className="!text-base" />,
                 }
               : null,

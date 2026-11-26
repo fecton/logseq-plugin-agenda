@@ -31,7 +31,7 @@ const TaskCard = ({ task, compact = false }: { task: AgendaTaskWithStartOrDeadli
     open: false,
   })
 
-  const editDisabled = task.rrule || task.recurringPast
+  const canMove = !task.rrule && !task.recurringPast && !task.recurrence && !task.recurrenceError
   const isMultipleDays = task.allDay && task.end
   const noStart = !task.start
   const estimatedTime = nextSessionDuration(task)
@@ -71,7 +71,7 @@ const TaskCard = ({ task, compact = false }: { task: AgendaTaskWithStartOrDeadli
           'bg-[#edeef0] opacity-80 dark:bg-[#2f2f33]': task.status === 'done',
           'p-1.5 text-xs': compact,
           // 循环任务及多天任务不能拖拽
-          'droppable-task-element': !editDisabled && !isMultipleDays && !noStart,
+          'droppable-task-element': canMove && !isMultipleDays && !noStart,
         },
       )}
       data-event={JSON.stringify({
@@ -94,7 +94,7 @@ const TaskCard = ({ task, compact = false }: { task: AgendaTaskWithStartOrDeadli
                   icon: <VscDebugConsole className="!text-base" />,
                 }
               : null,
-            editDisabled || task.project.isJournal
+            !canMove || task.project.isJournal
               ? null
               : {
                   key: 'backlog',

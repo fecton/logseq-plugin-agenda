@@ -4,6 +4,7 @@ import type { CalendarEvent } from '@/types/fullcalendar'
 import type { AgendaTaskWithDeadline, AgendaTaskWithStart, AgendaTaskWithStartOrDeadline } from '@/types/task'
 import { padZero } from '@/util/util'
 
+import { getSessionOccurrences, type SessionOccurrence, type SessionRange } from './taskRecurrence'
 import { getTaskSessions } from './taskSessions'
 
 /**
@@ -11,11 +12,16 @@ import { getTaskSessions } from './taskSessions'
  */
 export const transformAgendaTaskToCalendarEvent = (
   task: AgendaEntity,
-  options: { showFirstEventInCycleOnly?: boolean; showTimeLog?: boolean; groupType: 'filter' | 'page' } = {
+  options: {
+    showFirstEventInCycleOnly?: boolean
+    showTimeLog?: boolean
+    groupType: 'filter' | 'page'
+    range?: SessionRange
+  } = {
     groupType: 'page',
   },
 ): CalendarEvent[] => {
-  const { showFirstEventInCycleOnly = false, showTimeLog = false, groupType } = options
+  const { showFirstEventInCycleOnly = false, showTimeLog = false, groupType, range } = options
   const { estimatedTime = DEFAULT_ESTIMATED_TIME, timeLogs = [], status } = task
   const sessions = getTaskSessions(task)
   const logs: CalendarEvent[] = showTimeLog
@@ -31,16 +37,20 @@ export const transformAgendaTaskToCalendarEvent = (
       }))
     : []
   if (sessions.length) {
+    const displayedSessions: SessionOccurrence[] =
+      task.recurrence && range
+        ? getSessionOccurrences(sessions, task.recurrence, range, showFirstEventInCycleOnly)
+        : sessions
     return [
-      ...sessions.map(
+      ...displayedSessions.map(
         (session): CalendarEvent => ({
-          id: `${task.id}:session:${session.id}`,
+          id: `${task.id}:session:${session.id}${session.occurrenceDate ? `:${session.occurrenceDate}` : ''}`,
           title: task.title,
           allDay: false,
           start: session.start.toDate(),
           end: session.end.toDate(),
           extendedProps: { ...task, eventKind: 'session', sessionId: session.id },
-          editable: !task.sessionsError,
+          editable: !task.sessionsError && !task.recurrence && !task.recurrenceError,
           color: groupType === 'page' ? task.project.bgColor : task.filters?.[0]?.color,
         }),
       ),
@@ -90,7 +100,7 @@ export const transformAgendaTaskToCalendarEvent = (
       rrule,
       // 只有时间点事件才能传 duration
       duration: allDay ? undefined : { minute: spanTime },
-      editable: !(task.recurringPast || task.rrule || !task.start || task.sessionsError),
+      editable: !(task.recurringPast || task.rrule || !task.start || task.sessionsError || task.recurrenceError),
       color: groupType === 'page' ? task.project.bgColor : task.filters?.[0]?.color,
     },
     ...logs,

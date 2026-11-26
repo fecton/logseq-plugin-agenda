@@ -76,6 +76,19 @@ test('session form rejects overlaps before saving', async () => {
   expect(updateEntity).not.toHaveBeenCalled()
 })
 
+test('opens an existing repeat rule and submits an explicit clear without changing the sessions', async () => {
+  const start = dayjs('2026-11-24T13:00')
+  const sessions = [{ id: 'a', start, end: start.add(1, 'hour') }]
+  const recurrence = { frequency: 'day', interval: 1, end: { type: 'never' } } as const
+  const task = { ...initial, start, allDay: false, sessions, recurrence }
+  const { result } = renderHook(() => useEdit(task, messages))
+  expect(result.current.formData.recurrence).toEqual(recurrence)
+  act(() => result.current.updateFormData({ recurrence: undefined }))
+  await result.current.edit()
+  expect(updateEntity.mock.lastCall?.[0].data).toHaveProperty('recurrence', undefined)
+  expect(updateEntity.mock.lastCall?.[0].data.sessions).toBe(sessions)
+})
+
 test('an unscheduled task starts without invented dates/times and must get a date before saving', async () => {
   const { result } = renderHook(() => useEdit(initial, messages))
   expect(result.current.formData.startTime).toBeUndefined()

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { parseDurationString } from '@/Agenda3/helpers/block'
+import type { TaskRecurrence } from '@/Agenda3/helpers/taskRecurrence'
 import { validateSessions, type PlannedSession } from '@/Agenda3/helpers/taskSessions'
 import { getTaskTimeTotals } from '@/Agenda3/helpers/taskTime'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
@@ -25,6 +26,7 @@ type BaseCreateTaskForm = {
   size?: TaskSize
   priority?: TaskPriority
   sessions?: PlannedSession[]
+  recurrence?: TaskRecurrence
 }
 export type CreateTaskForm =
   | (BaseCreateTaskForm & {
@@ -86,6 +88,7 @@ const useCreate = (initialData: Partial<CreateTaskForm> | null, messageApi: Mess
         size: formData.size,
         priority: formData.priority,
         sessions: formData.sessions,
+        ...(formData.recurrence ? { recurrence: formData.recurrence } : {}),
       },
     })
   }

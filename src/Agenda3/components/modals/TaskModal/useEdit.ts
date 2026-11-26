@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { object, string, optional, special, type Output, safeParse, array, number, union, picklist } from 'valibot'
 
 import { genDurationString, parseDurationString } from '@/Agenda3/helpers/block'
+import type { TaskRecurrence } from '@/Agenda3/helpers/taskRecurrence'
 import { getTaskSessions, serializeSessions, validateSessions } from '@/Agenda3/helpers/taskSessions'
 import { getTaskTimeTotals } from '@/Agenda3/helpers/taskTime'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
@@ -56,7 +57,7 @@ const SessionFormSchema = object({
 })
 const EditFormSchema = union([StartFormSchema, DeadlineFormSchema, SessionFormSchema])
 type EditTaskForm = Output<typeof EditFormSchema>
-type EditTaskFormNoValidation = Partial<EditTaskForm>
+type EditTaskFormNoValidation = Partial<EditTaskForm> & { recurrence?: TaskRecurrence }
 const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) => {
   const { t } = useTranslation()
   const { updateEntity } = useAgendaEntities()
@@ -74,6 +75,7 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
     bindObjectiveId: initialTask?.bindObjectiveId,
     size: initialTask?.size,
     priority: initialTask?.priority,
+    recurrence: initialTask?.recurrence,
     sessions:
       initialTask && (getTaskSessions(initialTask).length || initialTask.sessions !== undefined)
         ? getTaskSessions(initialTask)
@@ -142,9 +144,10 @@ const useEdit = (initialTask: AgendaEntity | null, messageApi: MessageInstance) 
         ...initialTask,
         ...result.output,
         sessions: sessionsChanged ? formData.sessions : initialTask.sessions,
-        allDay,
+        ...(initialTask.recurrence || formData.recurrence ? { recurrence: formData.recurrence } : {}),
+        allDay: formData.sessions === undefined ? allDay : initialTask.allDay,
         // start 与 deadline 不能同时为空
-        start,
+        start: formData.sessions === undefined ? start : initialTask.start,
         deadline: deadline as AgendaEntityDeadline,
         end: result.output.endDateVal,
         estimatedTime: estimatedTime ? parseDurationString(estimatedTime) : undefined,

@@ -4,7 +4,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import type { AgendaEntity } from '@/types/entity'
 import type { AgendaTaskWithStart } from '@/types/task'
 
-import { parseAgendaDrawer, updateBlockSessions, updateTaskBlock } from '../block'
+import { createTaskBlock, parseAgendaDrawer, updateBlockSessions, updateTaskBlock } from '../block'
 import { transformAgendaTaskToCalendarEvent } from '../fullCalendar'
 import { classifyNeedsReview } from '../needsReview'
 import {
@@ -14,6 +14,7 @@ import {
   type BlockFromQuery,
 } from '../task'
 import { getDueTaskEndNotifications } from '../taskEndNotifications'
+import type { TaskRecurrence } from '../taskRecurrence'
 import {
   applySessionOperation,
   getTaskSessions,
@@ -60,8 +61,17 @@ function mockBlock(content = originalContent) {
   const update = vi.fn(async (_id: string, next: string) => {
     block.content = next
   })
+  const insert = vi.fn(async (_id: string, next: string) => {
+    block.content = next
+    return block
+  })
   vi.stubGlobal('logseq', {
-    Editor: { getBlock: vi.fn(async () => block), updateBlock: update, getPage: vi.fn(async () => ({ uuid: 'page' })) },
+    Editor: {
+      getBlock: vi.fn(async () => block),
+      updateBlock: update,
+      insertBlock: insert,
+      getPage: vi.fn(async () => ({ uuid: 'page' })),
+    },
     App: { getCurrentGraphFavorites: vi.fn(async () => []) },
   })
   return { block, update }
@@ -255,4 +265,70 @@ test('future sessions prevent schedule overdue; deadlines still count once; each
     ),
   ).toEqual(['a', 'b'])
   expect(getDueTaskEndNotifications([{ ...task, status: 'done' }], 0, dayjs('2026-11-25').valueOf())).toEqual([])
+})
+
+test('creating a repeating task aligns and reloads its sessions while retaining one deadline', async () => {
+  const { block } = mockBlock()
+  const recurrence: TaskRecurrence = {
+    frequency: 'week',
+    interval: 1,
+    weekdays: ['MO', 'WE'],
+    end: { type: 'after', count: 2 },
+  }
+  const sessions = [session('a', '2026-11-28T13:00'), session('b', '2026-11-29T18:00', 30)]
+  await createTaskBlock({
+    title: 'Series',
+    projectId: 'page',
+    sessions,
+    recurrence,
+    deadline: { value: dayjs('2026-12-01'), allDay: true },
+  })
+  expect(block.content).toContain('SCHEDULED: <2026-11-30 Mon 13:00>')
+  expect(block.content).toContain('DEADLINE: <2026-12-01 Tue>')
+  const loaded = await transformBlockToAgendaEntity(block, { isInitialized: true }, [])
+  expect(loaded.recurrence).toEqual(recurrence)
+  expect(loaded.sessions?.map(({ start }) => start.format('YYYY-MM-DD HH:mm'))).toEqual([
+    '2026-11-30 13:00',
+    '2026-12-01 18:00',
+  ])
+  expect(loaded.deadline?.value.format('YYYY-MM-DD')).toBe('2026-12-01')
+  await updateTaskBlock({ ...loaded, recurrence: undefined, projectId: 'page' }, loaded)
+  expect(parseAgendaDrawer(block.content)?.recurrence).toBeUndefined()
+  expect(parseAgendaDrawer(block.content)?.sessions).toEqual(loaded.sessions)
+})
+
+test('editing a legacy task can enable recurrence, preserve a concurrent rule on metadata edits, and clear the final session', async () => {
+  const { block, update } = mockBlock()
+  const initial = await transformBlockToAgendaEntity(block, { isInitialized: true }, [])
+  const recurrence: TaskRecurrence = { frequency: 'day', interval: 1, end: { type: 'never' } }
+  await updateTaskBlock({ ...initial, recurrence, projectId: 'page' }, initial)
+  expect(parseAgendaDrawer(block.content)?.sessions).toHaveLength(1)
+  expect(parseAgendaDrawer(block.content)?.recurrence).toEqual(recurrence)
+  await updateTaskBlock({ ...initial, priority: 'high', projectId: 'page' }, initial)
+  expect(parseAgendaDrawer(block.content)).toMatchObject({ priority: 'high', recurrence })
+  await expect(
+    updateTaskBlock({ ...initial, recurrence: { ...recurrence, interval: 2 }, projectId: 'page' }, initial),
+  ).rejects.toThrow('repeat rule changed elsewhere')
+  await expect(
+    updateTaskBlock({ ...initial, start: initial.start?.add(1, 'day'), projectId: 'page' }, initial),
+  ).rejects.toThrow('recurring schedule')
+  expect(update).toHaveBeenCalledTimes(2)
+  await expect(updateBlockSessions('task', { type: 'move-day', from: '2026-11-24', to: '2026-11-25' })).rejects.toThrow(
+    'task editor',
+  )
+  await updateBlockSessions('task', { type: 'remove', id: 'scheduled' })
+  expect(parseAgendaDrawer(block.content)?.recurrence).toBeUndefined()
+  expect(parseAgendaDrawer(block.content)?.sessions).toEqual([])
+  expect(block.content).not.toContain('SCHEDULED')
+  expect(block.content).toContain('DEADLINE')
+})
+
+test('a malformed repeat rule is reported and preserved when editing other fields', async () => {
+  const { block } = mockBlock(originalContent.replace('estimated: 1h', 'estimated: 1h\nrecurrence: {broken}'))
+  const initial = await transformBlockToAgendaEntity(block, { isInitialized: true }, [])
+  expect(initial.recurrenceError).toContain('Invalid recurrence data')
+  expect(initial.recurrence).toBeUndefined()
+  await updateTaskBlock({ ...initial, priority: 'high', projectId: 'page' }, initial)
+  expect(block.content).toContain('recurrence: {broken}')
+  expect(block.content).toContain('priority: high')
 })
