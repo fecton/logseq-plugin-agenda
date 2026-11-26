@@ -1,16 +1,24 @@
 import { ThirdPartyDraggable } from '@fullcalendar/interaction'
 import { message } from 'antd'
 import type { Dayjs } from 'dayjs'
+import { useAtomValue } from 'jotai'
 import { useEffect, useRef } from 'react'
 import { ReactSortable } from 'react-sortablejs'
 import type { SortableEvent } from 'sortablejs'
 
 import { sortKanbanTasks } from '@/Agenda3/helpers/taskPriority'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
+import { settingsAtom } from '@/Agenda3/models/settings'
 import type { AgendaTaskWithStartOrDeadline } from '@/types/task'
 import { cn, replaceDateInfo } from '@/util/util'
 
 import TaskCard from './taskCard/TaskCard'
+
+type TaskDropEvent = SortableEvent & { originalEvent?: MouseEvent | TouchEvent }
+
+function getDropPointer({ originalEvent }: TaskDropEvent) {
+  return originalEvent && ('changedTouches' in originalEvent ? originalEvent.changedTouches[0] : originalEvent)
+}
 
 export default function TaskDayList({
   day,
@@ -25,6 +33,7 @@ export default function TaskDayList({
 }) {
   const container = useRef<HTMLDivElement>(null)
   const { entities, updateEntity } = useAgendaEntities()
+  const useJournalDayAsSchedule = useAtomValue(settingsAtom).general?.useJournalDayAsSchedule
   const shown = sortKanbanTasks(tasks).slice(0, limit)
   useEffect(() => {
     if (!container.current) return
@@ -34,11 +43,9 @@ export default function TaskDayList({
     })
     return () => draggable.destroy()
   }, [])
-  const onAdd = async (event: SortableEvent & { originalEvent?: MouseEvent | TouchEvent }) => {
+  const onAdd = async (event: TaskDropEvent) => {
     // Sortable can report its last hovered list when the actual drop is in FullCalendar.
-    const originalEvent = event.originalEvent
-    const pointer =
-      originalEvent && ('changedTouches' in originalEvent ? originalEvent.changedTouches[0] : originalEvent)
+    const pointer = getDropPointer(event)
     const bounds = container.current?.getBoundingClientRect()
     // A scrolled month cell can geometrically sit beneath the sidebar or a popover.
     const hit = pointer && document.elementFromPoint?.(pointer.clientX, pointer.clientY)
@@ -85,6 +92,33 @@ export default function TaskDayList({
       message.error(error instanceof Error ? error.message : 'Could not move task. Please try again.')
     }
   }
+
+  // Check where the card was released so the Backlog panel also works when empty.
+  const dropInBacklog = async (event: TaskDropEvent) => {
+    const release = event.originalEvent
+    const pointer = getDropPointer(event)
+    if (
+      !release ||
+      !pointer ||
+      !['mouseup', 'pointerup', 'touchend'].includes(release.type) ||
+      !document.elementFromPoint(pointer.clientX, pointer.clientY)?.closest('[data-kanban-backlog]')
+    ) {
+      return
+    }
+
+    const id = event.item.dataset.id
+    const task = entities.find((item) => item.id === id)
+    try {
+      if (!id || !task) throw new Error('Task not found. Refresh Agenda and try again.')
+      if (useJournalDayAsSchedule && task.project.isJournal && task.sessions === undefined) {
+        throw new Error('This task is scheduled by its journal page.')
+      }
+      await updateEntity({ type: 'task-remove-date', id, data: { day: day.format('YYYY-MM-DD') } })
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Could not move task to Backlog. Please try again.')
+    }
+  }
+
   return (
     <div ref={container} className="flex min-h-[48px] min-w-0 flex-1 flex-col">
       <ReactSortable
@@ -98,6 +132,9 @@ export default function TaskDayList({
         setList={() => {}}
         onAdd={(event) => {
           void onAdd(event)
+        }}
+        onEnd={(event) => {
+          void dropInBacklog(event)
         }}
       >
         {shown.map((task) => (

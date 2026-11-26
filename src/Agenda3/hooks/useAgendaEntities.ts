@@ -60,7 +60,7 @@ const useAgendaEntities = () => {
       | {
           type: 'task-remove-date'
           id: string
-          data: null
+          data: { day: string } | null
         }
       | {
           type: 'objective'
@@ -100,7 +100,7 @@ const useAgendaEntities = () => {
           rawBlock = await updateBlockTaskStatus(task, data)
           break
         case 'task-remove-date':
-          rawBlock = await deleteBlockDateInfo(id)
+          rawBlock = await deleteBlockDateInfo(id, data?.day)
           break
         case 'objective':
           // 如果执行到这个分支，说明 task.objective 一定存在

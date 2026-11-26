@@ -61,6 +61,7 @@ const Backlog = ({
   return (
     <div
       className={cn('flex h-full w-[290px] flex-col border-l bg-gray-50 pl-2 shadow-md dark:bg-zinc-900', s.backlog)}
+      data-kanban-backlog={bindCalendar && view === 'tasks' ? true : undefined}
     >
       <div className="relative flex h-[44px] items-center gap-1.5 after:absolute after:bottom-0 after:h-1 after:w-full after:shadow">
         <BsArchive /> Backlog

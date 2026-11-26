@@ -120,9 +120,28 @@ export async function updateBlockSessions(uuid: string, operation: SessionOperat
   return logseq.Editor.getBlock(uuid)
 }
 
-export const deleteBlockDateInfo = async (uuid: string) => {
+export const deleteBlockDateInfo = async (uuid: string, day?: string) => {
   const originalBlock = await logseq.Editor.getBlock(uuid)
   if (!originalBlock) return Promise.reject(new Error('Block not found'))
+
+  const { content, scheduled } = originalBlock
+  const drawer = parseAgendaDrawer(content)
+  if (drawer?.sessionsError) throw new Error(drawer.sessionsError)
+
+  if (day) {
+    if (originalBlock.marker === 'DONE') throw new Error('Only open tasks can be moved to Backlog.')
+    const sessions = drawer?.sessions
+    if (sessions !== undefined) {
+      const remaining = sessions.filter((session) => session.start.format('YYYY-MM-DD') !== day)
+      if (remaining.length === sessions.length) return originalBlock
+      await logseq.Editor.updateBlock(uuid, writeSessionsContent(content, remaining))
+    } else {
+      if (scheduled !== Number(day.replaceAll('-', ''))) return originalBlock
+      const unscheduled = updateBlockScheduled(content, {})
+      await logseq.Editor.updateBlock(uuid, updateBlockAgendaDrawer(unscheduled, { end: undefined }))
+    }
+    return logseq.Editor.getBlock(uuid)
+  }
 
   const newContent = originalBlock.scheduled
     ? originalBlock.content
@@ -134,8 +153,6 @@ export const deleteBlockDateInfo = async (uuid: string) => {
         .filter(Boolean)
         .join('\n')
     : originalBlock.content
-  const drawer = parseAgendaDrawer(originalBlock.content)
-  if (drawer?.sessionsError) throw new Error(drawer.sessionsError)
   await logseq.Editor.updateBlock(
     uuid,
     drawer?.sessions !== undefined ? writeSessionsContent(newContent, []) : newContent,

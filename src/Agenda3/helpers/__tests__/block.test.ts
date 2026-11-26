@@ -1,7 +1,8 @@
 import dayjs from 'dayjs'
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 
 import {
+  deleteBlockDateInfo,
   genDurationString,
   generateTimeLogText,
   parseAgendaDrawer,
@@ -17,6 +18,54 @@ estimated: 1h30m
 :END:`
 const DEMO_AGENDA_DRAWER_NULL = `:AGENDA:
 :END:`
+
+describe('remove a Kanban assignment', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  test('clears the selected date and leaves the deadline, estimate, and notes', async () => {
+    const content = 'TODO Task\nDEADLINE: <2026-11-27 Fri>\n\nNotes\n' + DEMO_AGENDA_DRAWER
+    const block = {
+      uuid: 'task',
+      marker: 'TODO',
+      scheduled: 20261125,
+      content: content.replace('\n', '\nSCHEDULED: <2026-11-25 Wed>\n'),
+    }
+    const updateBlock = vi.fn()
+    vi.stubGlobal('logseq', { Editor: { getBlock: vi.fn().mockResolvedValue(block), updateBlock } })
+
+    await deleteBlockDateInfo(block.uuid, '2026-11-26')
+    expect(updateBlock).not.toHaveBeenCalled()
+
+    await deleteBlockDateInfo(block.uuid, '2026-11-25')
+    expect(updateBlock).toHaveBeenCalledWith(block.uuid, content)
+  })
+
+  test('removes sessions only from the selected start day and updates the scheduled date', async () => {
+    const sessions = [
+      { id: 'remove', start: '2026-11-25T09:00:00', end: '2026-11-25T09:30:00' },
+      { id: 'overnight', start: '2026-11-25T23:30:00', end: '2026-11-26T00:30:00' },
+      { id: 'keep', start: '2026-11-27T13:00:00', end: '2026-11-27T13:45:00' },
+    ]
+    const content = `TODO Task\nSCHEDULED: <2026-11-25 Wed 09:00>\n:AGENDA:\nsessions: ${JSON.stringify(
+      sessions,
+    )}\n:END:`
+    const block = { uuid: 'task', marker: 'TODO', scheduled: 20261125, content }
+    const updateBlock = vi.fn(async (_uuid: string, updated: string) => {
+      block.content = updated
+    })
+    vi.stubGlobal('logseq', { Editor: { getBlock: vi.fn().mockResolvedValue(block), updateBlock } })
+
+    await deleteBlockDateInfo(block.uuid, '2026-11-25')
+    expect(block.content).toContain('SCHEDULED: <2026-11-27 Fri 13:00>')
+    expect(parseAgendaDrawer(block.content)?.sessions?.map((session) => session.id)).toEqual(['keep'])
+
+    await deleteBlockDateInfo(block.uuid, '2026-11-27')
+    expect(block.content).not.toContain('SCHEDULED:')
+    expect(parseAgendaDrawer(block.content)?.sessions).toEqual([])
+  })
+})
 
 describe('helper: block', () => {
   test('generateTimeLogText', () => {
