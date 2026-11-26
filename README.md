@@ -70,7 +70,7 @@ Existing timed tasks remain compatible and are not bulk migrated. Session edits 
 
 ### Working hours in Time Box
 
-Open **Working hours** with the gear in the Time Box header. Enable the restriction, choose **Workdays**, **Weekends**, or **Custom** weekdays, and set one or more work periods. For example, 08:00–10:00 and 18:00–20:00 leave an eight-hour gap. Time Box keeps the full day visible and crosshatches every blocked period.
+Open **Working hours** with the gear in the Time Box header. Enable the restriction, choose **Workdays**, **Weekends**, or **Custom** weekdays, and set one or more work periods. For example, 08:00–10:00 and 18:00–20:00 leave an eight-hour gap. A work period can start on a selected day and end the next morning. Time Box keeps the full day visible and crosshatches every blocked period.
 
 Under **Blocked activities**, give each activity its own hours and repeat days. For example, set **Sleep** to 22:00–06:00 daily and **Work** to 09:00–17:00 on workdays. An overnight activity starts on its selected day and continues into the next morning. Time Box labels and combines the blocked periods. Activities also apply when **Limit scheduling to work periods** is off.
 

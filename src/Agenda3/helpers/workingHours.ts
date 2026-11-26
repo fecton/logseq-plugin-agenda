@@ -8,6 +8,7 @@ export const WORKING_HOURS_PRESETS = ['workdays', 'weekends', 'custom'] as const
 export const ACTIVITY_PRESETS = ['daily', ...WORKING_HOURS_PRESETS] as const
 
 type TimeRange = { start: string; end: string }
+type ClockPeriod = [start: number, end: number]
 export type BlockedActivity = TimeRange & {
   name: string
   preset: (typeof ACTIVITY_PRESETS)[number]
@@ -45,15 +46,30 @@ function clockMinutes(time: unknown) {
   return Number(time.slice(0, 2)) * 60 + Number(time.slice(3))
 }
 
+const toClockPeriod = ({ start, end }: TimeRange): ClockPeriod => [clockMinutes(start), clockMinutes(end)]
+
+const validClockPeriod = ([start, end]: ClockPeriod) =>
+  Number.isFinite(start) && Number.isFinite(end) && start < minutesPerDay && start !== end
+
+function periodsOnDay([start, end]: ClockPeriod, days: number[], day: number): ClockPeriod[] {
+  const periods: ClockPeriod[] = []
+  if (days.includes(day)) periods.push([start, end < start ? minutesPerDay : end])
+  if (end > 0 && end < start && days.includes((day + 6) % 7)) periods.push([0, end])
+  return periods
+}
+
 export function workingHoursError(settings: WorkingHoursSettings) {
   if (settings.preset === 'custom' && !settings.customDays.length) return 'Select at least one working day.'
-  const ranges = settings.ranges.map(({ start, end }) => [clockMinutes(start), clockMinutes(end)])
-  if (!ranges.length || ranges.some(([start, end]) => !(start < end))) {
-    return 'Each working period needs a start time before its end time.'
+  const ranges = settings.ranges.map(toClockPeriod)
+  if (!ranges.length || ranges.some((range) => !validClockPeriod(range))) {
+    return 'Each work period needs different start and end times.'
   }
-  ranges.sort((a, b) => a[0] - b[0])
-  if (ranges.some(([start], index) => index > 0 && start < ranges[index - 1][1])) {
-    return 'Working periods cannot overlap.'
+  const days = getDays(settings)
+  for (const day of weekdays) {
+    const segments = ranges.flatMap((range) => periodsOnDay(range, days, day)).sort((a, b) => a[0] - b[0])
+    if (segments.some(([start], index) => index > 0 && start < segments[index - 1][1])) {
+      return 'Working periods cannot overlap.'
+    }
   }
 }
 
@@ -69,9 +85,7 @@ export function blockedActivityError(activity: BlockedActivity) {
   )
     return 'Select at least one day for each blocked activity.'
 
-  const start = clockMinutes(activity.start)
-  const end = clockMinutes(activity.end)
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start === minutesPerDay || start === end) {
+  if (!validClockPeriod(toClockPeriod(activity))) {
     return 'Each blocked activity needs different start and end times.'
   }
 }
@@ -101,22 +115,18 @@ export function readWorkingHours(value?: string): WorkingHoursSettings {
 }
 
 function compileDay(settings: WorkingHoursSettings, day: number) {
+  const workdays = getDays(settings)
   const workPeriods = settings.enabled
-    ? getDays(settings).includes(day)
-      ? settings.ranges.map(({ start, end }) => [clockMinutes(start), clockMinutes(end)])
-      : []
+    ? settings.ranges.flatMap((range) => periodsOnDay(toClockPeriod(range), workdays, day))
     : [[0, minutesPerDay]]
 
-  const activities = settings.blockedActivities.flatMap((activity) => {
-    const days = getDays(activity)
-    const start = clockMinutes(activity.start)
-    const end = clockMinutes(activity.end)
-    const name = activity.name.trim()
-    const ranges: { start: number; end: number; name: string }[] = []
-    if (days.includes(day)) ranges.push({ start, end: end < start ? minutesPerDay : end, name })
-    if (end > 0 && end < start && days.includes((day + 6) % 7)) ranges.push({ start: 0, end, name })
-    return ranges
-  })
+  const activities = settings.blockedActivities.flatMap((activity) =>
+    periodsOnDay(toClockPeriod(activity), getDays(activity), day).map(([start, end]) => ({
+      start,
+      end,
+      name: activity.name.trim(),
+    })),
+  )
   const boundaries = [
     ...new Set([0, minutesPerDay, ...workPeriods.flat(), ...activities.flatMap(({ start, end }) => [start, end])]),
   ].sort((a, b) => a - b)

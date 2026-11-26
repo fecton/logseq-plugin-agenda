@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import dayjs from 'dayjs'
 import { Provider, useSetAtom } from 'jotai'
 import { afterEach, expect, test, vi } from 'vitest'
@@ -11,6 +11,7 @@ import { settingsAtom } from '@/Agenda3/models/settings'
 import type { AgendaEntity } from '@/types/entity'
 
 import TimeBox from '../timebox/TimeBox'
+import WorkingHoursModal from '../timebox/WorkingHoursModal'
 import Calendar from './Calendar'
 
 vi.mock('@/Agenda3/components/ThemeProvider', () => ({ useTheme: () => ({ currentTheme: 'light' }) }))
@@ -182,4 +183,31 @@ test('Time Box renders named blocks on their repeat days and applies activity ed
   }
   fireEvent.click(screen.getByRole('button', { name: 'Save' }))
   expect(screen.getByText('Dinner')).toBeInTheDocument()
+})
+
+test('Working hours saves the overnight work and sleep periods and puts errors in the work section', () => {
+  const computedStyle = window.getComputedStyle.bind(window)
+  vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => computedStyle(element))
+  const onSave = vi.fn()
+  const initial = {
+    ...DEFAULT_WORKING_HOURS,
+    enabled: true,
+    ranges: [{ start: '11:00', end: '07:00' }],
+    blockedActivities: [{ name: 'Sleep', preset: 'daily' as const, customDays: [], start: '22:00', end: '06:00' }],
+  }
+  render(<WorkingHoursModal initial={initial} onSave={onSave} onClose={() => undefined} />)
+
+  const work = within(screen.getByRole('region', { name: 'Work periods' }))
+  const blocked = within(screen.getByRole('region', { name: 'Blocked activities' }))
+  expect(work.getByText('Ends next day')).toBeInTheDocument()
+  expect(blocked.getByText('Ends next day')).toBeInTheDocument()
+  fireEvent.click(work.getByRole('button', { name: 'Add work period' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  expect(work.getByRole('alert')).toHaveTextContent('Each work period needs different start and end times.')
+  expect(blocked.queryByRole('alert')).not.toBeInTheDocument()
+  expect(onSave).not.toHaveBeenCalled()
+
+  fireEvent.click(work.getByRole('button', { name: 'Remove work period 2' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+  expect(onSave).toHaveBeenCalledWith(initial)
 })

@@ -42,7 +42,8 @@ test('settings round-trip while malformed settings and disabled schedules allow 
   expect(getWorkingHours(readWorkingHours(JSON.stringify(disabled)))).toBeUndefined()
   expect(getWorkingHours(readWorkingHours('{"enabled": true}'))).toBeUndefined()
   expect(workingHoursError({ ...splitHours, preset: 'custom', customDays: [] })).toMatch(/working day/)
-  expect(workingHoursError({ ...splitHours, ranges: [{ start: '10:00', end: '08:00' }] })).toMatch(/start time/)
+  expect(workingHoursError({ ...splitHours, ranges: [{ start: '10:00', end: '' }] })).toMatch(/different.*times/)
+  expect(workingHoursError({ ...splitHours, ranges: [{ start: '10:00', end: '10:00' }] })).toMatch(/different.*times/)
   expect(
     workingHoursError({ ...splitHours, ranges: [...splitHours.ranges, { start: '09:59', end: '10:30' }] }),
   ).toMatch(/overlap/)
@@ -63,6 +64,35 @@ test('adjacent periods and midnight work as continuous time only where the next 
   expect(hours.allows(date(26, '21:30'), date(27, '01:30'))).toBe(true)
   expect(hours.allows(date(27, '22:00'), date(28, '00:00'))).toBe(true)
   expect(hours.allows(date(27, '22:00'), date(28, '00:01'))).toBe(false)
+})
+
+test('an overnight work period saves alongside sleep and carries into the next day', () => {
+  const settings = {
+    ...splitHours,
+    ranges: [{ start: '11:00', end: '07:00' }],
+    blockedActivities: [sleep],
+  }
+  expect(workingHoursError(settings)).toBeUndefined()
+  const hours = getWorkingHours(readWorkingHours(JSON.stringify(settings)))!
+  expect(hours.allows(date(27, '11:00'), date(27, '22:00'))).toBe(true)
+  expect(hours.allows(date(27, '22:00'), date(28, '06:00'))).toBe(false)
+  expect(hours.allows(date(28, '06:00'), date(28, '07:00'))).toBe(true)
+  expect(hours.allows(date(28, '06:00'), date(28, '07:01'))).toBe(false)
+  expect(hours.allows(date(29, '06:00'), date(29, '07:00'))).toBe(false)
+})
+
+test('work periods only overlap when the previous day actually carries into them', () => {
+  const friday = {
+    ...splitHours,
+    preset: 'custom' as const,
+    customDays: [5],
+    ranges: [
+      { start: '11:00', end: '07:00' },
+      { start: '06:00', end: '08:00' },
+    ],
+  }
+  expect(workingHoursError(friday)).toBeUndefined()
+  expect(workingHoursError({ ...friday, customDays: [5, 6] })).toBe('Working periods cannot overlap.')
 })
 
 test('compiles daily overnight and workday activities into the same non-working schedule', () => {
