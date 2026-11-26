@@ -114,8 +114,8 @@ const Backlog = ({
                     return (
                       <div
                         key={task.id}
-                        className="droppable-task-element group cursor-move break-all rounded border bg-[#f9fafb] px-2 py-2 text-sm text-gray-600
-                          dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500"
+                        className="droppable-task-element group cursor-move select-none break-all rounded border bg-[#f9fafb] px-2 py-2 text-sm
+                          text-gray-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-500"
                         data-event={JSON.stringify({
                           id: task.id,
                           title: task.showTitle,
