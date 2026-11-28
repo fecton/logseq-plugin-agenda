@@ -20,6 +20,13 @@ import { parseTaskSize, type TaskSize } from '@/types/taskSize'
 import { updateBlock } from '@/util/logseq'
 
 import { secondsToHHmmss } from './fullCalendar'
+import {
+  buildNativeCompletion,
+  isLogseqRepeating,
+  readLogseqTimestamp,
+  verifyNativeCompletion,
+  type NativeOccurrence,
+} from './nativeRepeat'
 import type { BlockFromQuery } from './task'
 import { parseTaskRecurrence, validateRecurringSchedule, type TaskRecurrence } from './taskRecurrence'
 import {
@@ -475,10 +482,36 @@ export const updateTaskBlock = async (
 /**
  * toggle task status
  */
-export const updateBlockTaskStatus = async (taskInfo: AgendaEntity, status: AgendaEntity['status']) => {
+export const updateBlockTaskStatus = async (
+  taskInfo: AgendaEntity,
+  status: AgendaEntity['status'],
+  occurrence?: NativeOccurrence,
+) => {
+  if (taskInfo.recurringPast) throw new Error('This occurrence is already complete.')
   const todoTag = status === 'done' ? 'DONE' : getTodoTag()
   const block = await logseq.Editor.getBlock(taskInfo.id)
   if (!block) throw new Error('Block not found')
+  if (
+    occurrence ||
+    isLogseqRepeating(taskInfo) ||
+    block.repeated ||
+    block['repeated?'] ||
+    readLogseqTimestamp(block.content, 'SCHEDULED')?.repeater ||
+    readLogseqTimestamp(block.content, 'DEADLINE')?.repeater
+  ) {
+    if (!occurrence || status !== 'done') throw new Error('Only the current Logseq occurrence can be completed.')
+    if ((await logseq.Editor.checkEditing()) === block.uuid) {
+      throw new Error('Finish editing this block in Logseq before completing it.')
+    }
+    const latest = await logseq.Editor.getBlock(block.uuid)
+    if (!latest) throw new Error('Block not found')
+    const expected = buildNativeCompletion(latest, occurrence, dayjs())
+    await logseq.Editor.updateBlock(latest.uuid, expected.content)
+    const saved = await logseq.Editor.getBlock(latest.uuid)
+    if (!saved || !verifyNativeCompletion(saved, expected))
+      throw new Error('Could not verify the completion in Logseq.')
+    return { block: saved, previousMarker: latest.marker, completedOccurrence: true }
+  }
   const rawTodoTag = block.marker
   if (!rawTodoTag) {
     message.error('This is not a todo block')
@@ -799,6 +832,7 @@ export const transformBlockToBlockFromQuery = async (block: BlockEntity | null):
   return {
     ...block,
     marker: block.marker,
+    repeated: block.repeated ?? block['repeated?'],
     page: {
       ...page,
       originalName: page.originalName,

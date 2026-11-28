@@ -7,6 +7,7 @@ import { VscDebugConsole } from 'react-icons/vsc'
 
 import { minutesToHHmm } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
+import { getNativeOccurrence, isLogseqRepeating } from '@/Agenda3/helpers/nativeRepeat'
 import { nextSessionDuration } from '@/Agenda3/helpers/taskSessions'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import { logseqAtom } from '@/Agenda3/models/logseq'
@@ -31,10 +32,12 @@ const TaskCard = ({ task, compact = false }: { task: AgendaTaskWithStartOrDeadli
     open: false,
   })
 
-  const canMove = !task.rrule && !task.recurringPast && !task.recurrence && !task.recurrenceError
+  const canMove = !isLogseqRepeating(task) && !task.recurringPast && !task.recurrence && !task.recurrenceError
   const isMultipleDays = task.allDay && task.end
   const noStart = !task.start
   const estimatedTime = nextSessionDuration(task)
+  const nativeOccurrence = getNativeOccurrence(task, task.start)
+  const readOnlyOccurrence = task.recurringPast || (isLogseqRepeating(task) && !nativeOccurrence)
 
   const { updateEntity, deleteEntity } = useAgendaEntities()
 
@@ -44,9 +47,14 @@ const TaskCard = ({ task, compact = false }: { task: AgendaTaskWithStartOrDeadli
     status: AgendaEntity['status'],
   ) => {
     event.stopPropagation()
-    if (task.rrule) return message.error('Please modify the status of the recurring task in logseq.')
     try {
-      await updateEntity({ type: 'task-status', id: task.id, data: status, completionSource: event.currentTarget })
+      await updateEntity({
+        type: 'task-status',
+        id: task.id,
+        data: status,
+        completionSource: event.currentTarget,
+        ...(nativeOccurrence && { nativeOccurrence }),
+      })
     } catch (error) {
       message.error(error instanceof Error ? error.message : 'Could not update task. Please try again.')
     }
@@ -105,12 +113,14 @@ const TaskCard = ({ task, compact = false }: { task: AgendaTaskWithStartOrDeadli
                   label: 'Move to backlog',
                   icon: <BsArchive className="!text-sm" />,
                 },
-            {
-              key: 'delete',
-              label: 'Delete task',
-              danger: true,
-              icon: <RiDeleteBin4Line className="!text-base" />,
-            },
+            readOnlyOccurrence
+              ? null
+              : {
+                  key: 'delete',
+                  label: 'Delete task',
+                  danger: true,
+                  icon: <RiDeleteBin4Line className="!text-base" />,
+                },
           ],
           onClick: ({ key }) => {
             if (key === 'delete') onDeleteTask(task.id)
@@ -134,7 +144,13 @@ const TaskCard = ({ task, compact = false }: { task: AgendaTaskWithStartOrDeadli
           }}
         >
           {/* ========= Toolbar ========= */}
-          <Toolbar task={task} groupType={groupType} onClickMark={onClickTaskMark} compact={compact} />
+          <Toolbar
+            task={task}
+            groupType={groupType}
+            onClickMark={readOnlyOccurrence ? undefined : onClickTaskMark}
+            completeOccurrence={Boolean(nativeOccurrence)}
+            compact={compact}
+          />
 
           {/* ========= Title ========= */}
           <div

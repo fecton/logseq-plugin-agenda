@@ -13,6 +13,7 @@ import { fillBlockReference } from '@/util/schedule'
 import { genDays } from '@/util/util'
 
 import { parseAgendaDrawer } from './block'
+import { readLogseqTimestamp, readNativeCompletionHistory } from './nativeRepeat'
 import { transformPageToProject } from './project'
 import { getSessionOccurrences } from './taskRecurrence'
 import { getTaskSessions } from './taskSessions'
@@ -102,7 +103,7 @@ export const getAgendaEntities = async (settings: Settings, options: { scheduled
     const _block = {
       ...block,
       uuid: typeof block.uuid === 'string' ? block.uuid : block.uuid?.['$uuid$'],
-      repeated: block['repeated?'],
+      repeated: block.repeated ?? block['repeated?'],
       page: {
         ...block.page,
         uuid: block.page?.['uuid'],
@@ -122,28 +123,34 @@ export const getAgendaEntities = async (settings: Settings, options: { scheduled
     }
 
     const task = await transformBlockToAgendaEntity(_block as unknown as BlockFromQuery, settings, favoritePages)
-    const recurringPastTasks: AgendaEntity[] =
-      task.doneHistory?.map((pastTaskEnd) => {
-        const { estimatedTime = DEFAULT_ESTIMATED_TIME } = task
-        const manualMinutes = getTaskTimeTotals(task).manualLogMinutes
-        const spanTime = task.status === 'done' && manualMinutes ? manualMinutes : estimatedTime
-        return {
-          ...task,
-          id: task.id + '_' + pastTaskEnd.format('YYYYMMDDHHmm'),
-          start: pastTaskEnd.subtract(spanTime, 'minute'),
-          recurringPast: true,
-          rrule: undefined,
-          ...(task.recurrence ? { recurrence: undefined } : {}),
-          repeated: false,
-          status: 'done',
-          actualTime: 0,
-        }
-      }) ?? []
-    return [task].concat(recurringPastTasks)
+    return [task, ...projectCompletionHistory(task)]
   })
 
   const tasks = await Promise.all(promiseList)
   return tasks.flat()
+}
+
+export function projectCompletionHistory(task: AgendaEntity): AgendaEntity[] {
+  const seen = new Set<string>()
+  const { estimatedTime = DEFAULT_ESTIMATED_TIME } = task
+  const manualMinutes = getTaskTimeTotals(task).manualLogMinutes
+  const spanTime = task.status === 'done' && manualMinutes ? manualMinutes : estimatedTime
+  return (task.doneHistory ?? []).map((completedAt, index) => {
+    const key = completedAt.format('YYYYMMDDHHmm')
+    const id = task.id + '_' + key + (seen.has(key) ? '_' + index : '')
+    seen.add(key)
+    return {
+      ...task,
+      id,
+      start: task.allDay ? completedAt.startOf('day') : completedAt.subtract(spanTime, 'minute'),
+      recurringPast: true,
+      rrule: undefined,
+      ...(task.recurrence ? { recurrence: undefined } : {}),
+      status: 'done',
+      timeLogs: [],
+      actualTime: 0,
+    }
+  })
 }
 
 /**
@@ -231,30 +238,24 @@ export const transformBlockToAgendaEntity = async (
     })
     .filter(Boolean)
 
-  /**
-   * parse done history
-   * "TODO Agenda new task design\n:LOGBOOK:\n* State "DONE" from "TODO" [2023-10-09 Mon 08:16]\n:END:"
-   * => Dayjs[]
-   */
-  const doneHistory = content
-    .split('\n')
-    .filter((l) => l.startsWith('* State "DONE" from '))
-    .map((item) => {
-      const datetimeString = item.replace(/[a-zA-Z\s\[\]*"]/g, '')
-      return dayjs(datetimeString, 'YYYY-MM-DDHH:mm')
-    })
+  const doneHistory = readNativeCompletionHistory(content)
 
-  // recurring info from scheduled
+  // Keep the visible schedule aligned with the timestamp used for native completion.
   let rrule: RRule | undefined
   if (block.repeated && scheduledNumber) {
-    const scheduledString =
-      block.content
-        ?.split('\n')
-        ?.find((l) => l.startsWith(`SCHEDULED:`))
-        ?.trim() ?? ''
-    const _rrule = parseRRule(scheduledString)
-    if (_rrule) rrule = _rrule
+    const timestamp = readLogseqTimestamp(content, 'SCHEDULED')
+    if (timestamp?.repeater) {
+      const unit = timestamp.repeater.slice(-1) as keyof typeof FREQ_MAP
+      rrule = {
+        freq: FREQ_MAP[unit],
+        interval: timestamp.interval,
+        dtstart: timestamp.allDay ? timestamp.start.format('YYYY-MM-DD') : timestamp.start.format(),
+      }
+      start = timestamp.start
+      allDay = timestamp.allDay
+    }
   }
+  const usesAgendaSessions = !rrule && agendaDrawer?.sessions !== undefined
 
   // filters
   let _filters: Filter[] = filters ?? []
@@ -272,9 +273,9 @@ export const transformBlockToAgendaEntity = async (
     status,
     title,
     showTitle,
-    start: agendaDrawer?.sessions !== undefined ? agendaDrawer.sessions[0]?.start : start,
-    end,
-    allDay: agendaDrawer?.sessions !== undefined ? false : allDay,
+    start: usesAgendaSessions ? agendaDrawer.sessions?.[0]?.start : start,
+    end: rrule ? undefined : end,
+    allDay: usesAgendaSessions ? false : allDay,
     deadline,
     estimatedTime,
     project: transformPageToProject(page, _favoritePages),
@@ -298,48 +299,6 @@ export const transformBlockToAgendaEntity = async (
     rawBlock: block,
   }
   return { ...task, actualTime: getTaskTimeTotals(task).actualMinutes }
-}
-
-/**
- * parse recurring rules
- * SCHEDULED: <2023-10-10 Tue ++1d> -> { freq: 'daily', interval: 1, dtstart: '2023-10-10' }
- * SCHEDULED: <2023-10-10 Tue .+1d> -> { freq: 'daily', interval: 1, dtstart: '2023-10-10' }
- * SCHEDULED: <2023-10-10 Tue +1d> ->  { freq: 'daily', interval: 1, dtstart: '2023-10-10' }
- * SCHEDULED: <2023-10-10 Tue 10:00 +1d> ->  { freq: 'daily', interval: 1, dtstart: '2023-10-10T10:00:00' }
- */
-function parseRRule(input: string): RRule | null {
-  const cleanedInput = input.replace('SCHEDULED:', '').replace('<', '').replace('>', '').trim()
-  const parts = cleanedInput.split(' ')
-
-  function parseFreq(freq: string) {
-    const rruleReg = /[.+]*\+(\d+)([hdwmy])/
-    const res = freq.match(rruleReg)
-    if (!res) return null
-    return {
-      freq: FREQ_MAP[res[2]],
-      interval: Number(res[1]),
-    }
-  }
-
-  if (parts.length === 4) {
-    const start = dayjs(parts[0] + ' ' + parts[2], 'YYYY-MM-DD HH:mm')
-    const res = parseFreq(parts[3])
-    if (!res) return null
-    return {
-      freq: res.freq,
-      interval: res.interval,
-      dtstart: start.format(),
-    }
-  } else if (parts.length === 3) {
-    const res = parseFreq(parts[2])
-    if (!res) return null
-    return {
-      freq: res.freq,
-      interval: res.interval,
-      dtstart: parts[0],
-    }
-  }
-  return null
 }
 
 export const DATE_FORMATTER_FOR_KEY = 'YYYYMMDD'

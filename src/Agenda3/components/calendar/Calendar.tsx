@@ -5,7 +5,7 @@ import FullCalendar from '@fullcalendar/react'
 import rrulePlugin from '@fullcalendar/rrule'
 import timeGridPlugin from '@fullcalendar/timegrid'
 import clsx from 'clsx'
-import dayjs from 'dayjs'
+import dayjs, { type Dayjs } from 'dayjs'
 import { useAtomValue } from 'jotai'
 import React, { useEffect, useRef, useState } from 'react'
 
@@ -13,6 +13,7 @@ import { useTheme } from '@/Agenda3/components/ThemeProvider'
 import { CALENDAR_VIEW_IDS } from '@/Agenda3/helpers/dateViews'
 import { transformAgendaTaskToCalendarEvent } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
+import { isLogseqRepeating } from '@/Agenda3/helpers/nativeRepeat'
 import { track } from '@/Agenda3/helpers/umami'
 import useSessionScheduling, { captureSessionLeave } from '@/Agenda3/hooks/useSessionScheduling'
 import { appAtom } from '@/Agenda3/models/app'
@@ -67,6 +68,7 @@ const Calendar = () => {
     open: boolean
     task?: AgendaEntity
     sessionId?: string
+    occurrenceStart?: Dayjs | null
   }>({
     open: false,
   })
@@ -81,10 +83,15 @@ const Calendar = () => {
   })
 
   const onEventClick = (info: EventClickArg) => {
+    const task = info.event.extendedProps as AgendaEntity
     setEditTaskModal({
       open: true,
-      task: info.event.extendedProps as AgendaEntity,
+      task,
       sessionId: info.event.extendedProps.sessionId,
+      ...(isLogseqRepeating(task) && {
+        occurrenceStart:
+          info.event.start && info.event.extendedProps.eventKind !== 'time-log' ? dayjs(info.event.start) : null,
+      }),
     })
   }
   const onEventCtrlClick = (info: EventClickArg) => {
@@ -252,6 +259,7 @@ const Calendar = () => {
             type: 'edit',
             initialTaskData: editTaskModal.task,
             sessionId: editTaskModal.sessionId,
+            ...(editTaskModal.occurrenceStart !== undefined && { occurrenceStart: editTaskModal.occurrenceStart }),
           }}
           onOk={() => {
             setEditTaskModal({ open: false })

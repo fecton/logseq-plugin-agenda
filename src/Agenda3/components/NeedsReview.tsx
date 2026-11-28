@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
+import { getNativeOccurrence, isLogseqRepeating } from '@/Agenda3/helpers/nativeRepeat'
 import type { OverdueTask } from '@/Agenda3/helpers/needsReview'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import { needsReviewAtom } from '@/Agenda3/models/entities/needsReview'
@@ -21,14 +22,23 @@ export function ReviewTask({ task, reasons = [] }: { task: AgendaEntity; reasons
   const { updateEntity } = useAgendaEntities()
   const [editing, setEditing] = useState<AgendaEntity>()
   const [saving, setSaving] = useState(false)
-  const recurring = Boolean(task.rrule || task.rawBlock.repeated)
+  const recurring = isLogseqRepeating(task)
+  const nativeOccurrence = getNativeOccurrence(task, task.start)
   const openInLogseq = () => navToLogseqBlock(task, currentGraph)
   const complete = async (event: React.MouseEvent<HTMLElement>) => {
     setSaving(true)
     try {
-      await updateEntity({ type: 'task-status', id: task.id, data: 'done', completionSource: event.currentTarget })
+      await updateEntity({
+        type: 'task-status',
+        id: task.id,
+        data: 'done',
+        completionSource: event.currentTarget,
+        ...(nativeOccurrence && { nativeOccurrence }),
+      })
     } catch (error) {
-      message.error(t('Could not save task. Please try again.'))
+      message.error(
+        t(nativeOccurrence && error instanceof Error ? error.message : 'Could not save task. Please try again.'),
+      )
     } finally {
       setSaving(false)
     }
@@ -65,14 +75,14 @@ export function ReviewTask({ task, reasons = [] }: { task: AgendaEntity; reasons
       </div>
       <div className="flex flex-wrap gap-1">
         {!recurring ? (
-          <>
-            <Button size="small" onClick={() => setEditing(task)} disabled={saving}>
-              {t(task.start ? 'Reschedule' : 'Schedule')}
-            </Button>
-            <Button size="small" onClick={complete} loading={saving}>
-              {t('Mark done')}
-            </Button>
-          </>
+          <Button size="small" onClick={() => setEditing(task)} disabled={saving}>
+            {t(task.start ? 'Reschedule' : 'Schedule')}
+          </Button>
+        ) : null}
+        {!recurring || nativeOccurrence ? (
+          <Button size="small" onClick={complete} loading={saving}>
+            {t(nativeOccurrence ? 'Complete occurrence' : 'Mark done')}
+          </Button>
         ) : null}
         <Button size="small" type="link" className="!px-0" onClick={openInLogseq}>
           {t('Open in Logseq')}

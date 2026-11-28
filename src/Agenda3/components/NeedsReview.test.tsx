@@ -35,7 +35,13 @@ test('shows only overdue tasks once, routes recurring edits to Logseq, and retai
     task('Old task', { start: dayjs('2025-01-01'), deadline: { value: dayjs('2025-01-02'), allDay: true } }),
     task('Unscheduled task'),
     task('Deadline task', { deadline: { value: dayjs('2026-11-01'), allDay: true } }),
-    task('Recurring task', { start: dayjs('2026-10-01'), rawBlock: { repeated: true } as AgendaEntity['rawBlock'] }),
+    task('Recurring task', {
+      start: dayjs('2026-10-01'),
+      rawBlock: {
+        repeated: true,
+        content: 'TODO Recurring task\nSCHEDULED: <2026-10-01 Thu +1d>',
+      } as AgendaEntity['rawBlock'],
+    }),
     task('Done task', { status: 'done' }),
   ]
   render(
@@ -85,4 +91,17 @@ test('shows only overdue tasks once, routes recurring edits to Logseq, and retai
   await waitFor(() => expect(screen.getByText('Could not save task. Please try again.')).toBeVisible())
   expect(screen.getByText('Old task')).toBeVisible()
   expect(screen.getByText('Overdue (3)')).toBeVisible()
+
+  const completeOccurrence = within(recurring).getByRole('button', { name: 'Complete occurrence' })
+  await act(async () => fireEvent.click(completeOccurrence))
+  expect(updateEntity).toHaveBeenLastCalledWith({
+    type: 'task-status',
+    id: 'Recurring task',
+    data: 'done',
+    completionSource: completeOccurrence,
+    nativeOccurrence: {
+      start: dayjs('2026-10-01'),
+      expectedContent: 'TODO Recurring task\nSCHEDULED: <2026-10-01 Thu +1d>',
+    },
+  })
 })

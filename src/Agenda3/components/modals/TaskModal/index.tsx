@@ -12,6 +12,7 @@ import { RiCheckboxBlankCircleLine, RiDeleteBin4Line } from 'react-icons/ri'
 import { parseDurationString } from '@/Agenda3/helpers/block'
 import { minutesToHHmm } from '@/Agenda3/helpers/fullCalendar'
 import { navToLogseqBlock } from '@/Agenda3/helpers/logseq'
+import { getNativeOccurrence, isLogseqRepeating } from '@/Agenda3/helpers/nativeRepeat'
 import { getTaskSessions } from '@/Agenda3/helpers/taskSessions'
 import { track } from '@/Agenda3/helpers/umami'
 import { getDaysBetween } from '@/Agenda3/helpers/util'
@@ -64,6 +65,7 @@ const TaskModal = ({
         type: 'edit'
         initialTaskData: AgendaEntity
         sessionId?: string
+        occurrenceStart?: Dayjs | null
       }
 }) => {
   const { t } = useTranslation()
@@ -102,12 +104,16 @@ const TaskModal = ({
   }, [_open])
   const { edit } = editHookResult
   const action = info.type === 'edit' ? edit : create
-  // can't edit recurring task
   const editDisabled =
-    info.type === 'edit' &&
-    (info.initialTaskData.rrule || info.initialTaskData.recurringPast || info.initialTaskData.rawBlock.repeated)
-      ? true
-      : false
+    info.type === 'edit' && (info.initialTaskData.recurringPast || isLogseqRepeating(info.initialTaskData))
+  const nativeOccurrence =
+    info.type === 'edit'
+      ? getNativeOccurrence(
+          info.initialTaskData,
+          info.occurrenceStart === undefined ? info.initialTaskData.start : info.occurrenceStart,
+        )
+      : undefined
+  const occurrenceReadOnly = editDisabled && !nativeOccurrence
   const sessionError = info.type === 'edit' ? info.initialTaskData.sessionsError : undefined
   const recurrenceError = info.type === 'edit' ? info.initialTaskData.recurrenceError : undefined
   const sessionDuration = formData.estimatedTime ? parseDurationString(formData.estimatedTime) : undefined
@@ -143,7 +149,7 @@ const TaskModal = ({
     }
   }
   const handleDelete = async () => {
-    if (info.type === 'edit') {
+    if (info.type === 'edit' && !occurrenceReadOnly) {
       deleteEntity(info.initialTaskData.id)
       onDelete?.(info.initialTaskData.id)
       setInternalOpen(false)
@@ -187,17 +193,22 @@ const TaskModal = ({
     messageApi.success('Page created')
   }
   const onSwitchTaskStatus = async (status: AgendaEntity['status'], completionSource?: HTMLElement) => {
-    if (editDisabled) return messageApi.error('Please modify the status of the recurring task in logseq.')
-    if (info.type !== 'edit') return
-
-    if (saving) return
+    if (info.type !== 'edit' || occurrenceReadOnly || saving) return
     setSaving(true)
     try {
-      await updateEntity({ type: 'task-status', id: info.initialTaskData.id, data: status, completionSource })
+      await updateEntity({
+        type: 'task-status',
+        id: info.initialTaskData.id,
+        data: status,
+        completionSource,
+        ...(nativeOccurrence && { nativeOccurrence }),
+      })
       onOk?.()
       setInternalOpen(false)
     } catch (error) {
-      messageApi.error(t('Could not save task. Please try again.'))
+      messageApi.error(
+        t(nativeOccurrence && error instanceof Error ? error.message : 'Could not save task. Please try again.'),
+      )
     } finally {
       setSaving(false)
     }
@@ -261,28 +272,28 @@ const TaskModal = ({
         footer={
           <div className="flex items-center justify-between">
             <div>
-              {info.type === 'edit' && info.initialTaskData.status === 'todo' ? (
+              {info.type === 'edit' && info.initialTaskData.status === 'todo' && !occurrenceReadOnly ? (
                 <Button
                   ref={completeButtonRef}
                   className="inline-flex items-center px-2"
                   icon={<IoIosCheckmarkCircleOutline className="text-base" />}
-                  disabled={editDisabled || saving}
+                  disabled={saving}
                   onClick={(event) => onSwitchTaskStatus('done', event.currentTarget)}
                 >
-                  {t('Complete')}
+                  {t(nativeOccurrence ? 'Complete occurrence' : 'Complete')}
                 </Button>
               ) : null}
-              {info.type === 'edit' && info.initialTaskData.status === 'done' ? (
+              {info.type === 'edit' && info.initialTaskData.status === 'done' && !occurrenceReadOnly ? (
                 <Button
                   className="inline-flex items-center px-2"
-                  disabled={editDisabled || saving}
+                  disabled={saving}
                   icon={<RiCheckboxBlankCircleLine />}
                   onClick={() => onSwitchTaskStatus('todo')}
                 >
                   {t('Incomplete')}
                 </Button>
               ) : null}
-              {info.type === 'edit' ? (
+              {info.type === 'edit' && !occurrenceReadOnly ? (
                 <Popconfirm
                   key="delete"
                   title="Delete the task"

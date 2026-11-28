@@ -24,12 +24,14 @@ const Toolbar = ({
   task,
   groupType,
   onClickMark,
+  completeOccurrence = false,
   compact = false,
 }: {
   task: AgendaTaskWithStartOrDeadline
   groupType: 'page' | 'filter'
   compact?: boolean
-  onClickMark: (event: React.MouseEvent<HTMLButtonElement>, task: AgendaEntity, status: AgendaEntity['status']) => void
+  onClickMark?: (event: React.MouseEvent<HTMLButtonElement>, task: AgendaEntity, status: AgendaEntity['status']) => void
+  completeOccurrence?: boolean
 }) => {
   const { currentGraph } = useAtomValue(logseqAtom)
   const { t } = useTranslation()
@@ -39,14 +41,20 @@ const Toolbar = ({
     <div className="flex flex-wrap items-center justify-between gap-1">
       <div className="flex items-center gap-1">
         {/* Check Marker */}
-        <button
-          type="button"
-          aria-label={t(task.status === 'done' ? 'Mark unfinished' : 'Mark done')}
-          className="text-xl text-gray-500 dark:text-gray-300"
-          onClick={(e) => onClickMark(e, task, task.status === 'done' ? 'todo' : 'done')}
-        >
-          {task.status === 'done' ? <IoIosCheckmarkCircle /> : <IoIosCheckmarkCircleOutline />}
-        </button>
+        {onClickMark ? (
+          <button
+            type="button"
+            aria-label={t(
+              completeOccurrence ? 'Complete occurrence' : task.status === 'done' ? 'Mark unfinished' : 'Mark done',
+            )}
+            className="text-xl text-gray-500 dark:text-gray-300"
+            onClick={(e) => onClickMark(e, task, task.status === 'done' ? 'todo' : 'done')}
+          >
+            {task.status === 'done' ? <IoIosCheckmarkCircle /> : <IoIosCheckmarkCircleOutline />}
+          </button>
+        ) : task.status === 'done' ? (
+          <IoIosCheckmarkCircle className="text-xl text-gray-500 dark:text-gray-300" aria-hidden />
+        ) : null}
         {/* Timer */}
         {task.allDay || !task.start ? null : (
           <span

@@ -4,7 +4,8 @@ import { type Dayjs } from 'dayjs'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { useCallback } from 'react'
 
-import { transformBlockToAgendaEntity } from '@/Agenda3/helpers/task'
+import type { NativeOccurrence } from '@/Agenda3/helpers/nativeRepeat'
+import { projectCompletionHistory, transformBlockToAgendaEntity } from '@/Agenda3/helpers/task'
 import { serializeTaskWrite, type SessionOperation } from '@/Agenda3/helpers/taskSessions'
 import type { ScheduleValidator } from '@/Agenda3/helpers/workingHours'
 import { settingsAtom } from '@/Agenda3/models/settings'
@@ -59,6 +60,7 @@ const useAgendaEntities = () => {
           id: string
           data: AgendaTaskWithStart['status']
           completionSource?: HTMLElement
+          nativeOccurrence?: NativeOccurrence
         }
       | {
           type: 'task-remove-date'
@@ -91,6 +93,7 @@ const useAgendaEntities = () => {
       }
       let rawBlock: BlockEntity | null = null
       let previousMarker: string | undefined
+      let completedOccurrence = false
       invalidate()
       switch (type) {
         case 'task-session':
@@ -104,9 +107,14 @@ const useAgendaEntities = () => {
           break
         case 'task-status':
         case 'objective-status': {
-          const statusUpdate = await updateBlockTaskStatus(task, data)
+          const statusUpdate = await updateBlockTaskStatus(
+            task,
+            data,
+            type === 'task-status' ? params.nativeOccurrence : undefined,
+          )
           rawBlock = statusUpdate?.block ?? null
           previousMarker = statusUpdate?.previousMarker
+          completedOccurrence = statusUpdate?.completedOccurrence === true
           break
         }
         case 'task-remove-date':
@@ -129,8 +137,12 @@ const useAgendaEntities = () => {
       }
 
       const newTask = await transformBlockToAgendaEntity(block, settings)
-      if (previousMarker && previousMarker !== 'DONE' && newTask.status === 'done') celebrate?.()
+      if (completedOccurrence || (previousMarker && previousMarker !== 'DONE' && newTask.status === 'done')) {
+        celebrate?.()
+      }
       invalidate()
+      const isReplacedHistory = (entity: AgendaEntity) =>
+        completedOccurrence && entity.recurringPast && entity.rawBlock.uuid === id
       const isFilterMode = (settings.selectedFilters || [])?.length > 0
       if (isFilterMode && (newTask.filters ?? []).length === 0) {
         const message = type.startsWith('task')
@@ -144,17 +156,16 @@ const useAgendaEntities = () => {
           description,
           duration: 0,
         })
-        setEntities((_tasks) => _tasks.filter((task) => task.id !== id))
+        setEntities((_tasks) => _tasks.filter((task) => task.id !== id && !isReplacedHistory(task)))
         return newTask
       }
-      setEntities((_tasks) => {
-        return _tasks.map((task) => {
-          if (task.id === id) {
-            return { ...task, ...newTask }
-          }
-          return task
-        })
-      })
+      const history = completedOccurrence ? projectCompletionHistory(newTask) : []
+      setEntities((_tasks) =>
+        _tasks.flatMap((task) => {
+          if (isReplacedHistory(task)) return []
+          return task.id === id ? [{ ...task, ...newTask }, ...history] : [task]
+        }),
+      )
       return newTask
     })
   }

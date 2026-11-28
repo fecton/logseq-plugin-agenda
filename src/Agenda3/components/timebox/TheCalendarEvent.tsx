@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { IoIosCheckmarkCircle } from 'react-icons/io'
 import { RiDeleteBin4Line, RiInboxUnarchiveLine } from 'react-icons/ri'
 
+import { getNativeOccurrence, isLogseqRepeating } from '@/Agenda3/helpers/nativeRepeat'
 import type { ScheduleValidator } from '@/Agenda3/helpers/workingHours'
 import useAgendaEntities from '@/Agenda3/hooks/useAgendaEntities'
 import type { CalendarEvent } from '@/types/fullcalendar'
@@ -65,6 +66,10 @@ const TheCalendarEvent = ({
     </div>
   )
   if (!savedTask.rawBlock) return content
+  const nativeSeries = isLogseqRepeating(savedTask)
+  const occurrenceStart = info.event.start && savedTask.eventKind !== 'time-log' ? dayjs(info.event.start) : null
+  const readOnlyOccurrence =
+    savedTask.recurringPast || (nativeSeries && !getNativeOccurrence(savedTask, occurrenceStart))
   return (
     <TaskModal
       validateSchedule={validateSchedule}
@@ -72,6 +77,7 @@ const TheCalendarEvent = ({
         type: 'edit',
         initialTaskData: savedTask,
         sessionId: savedTask.sessionId,
+        ...(nativeSeries && { occurrenceStart }),
       }}
     >
       <Dropdown
@@ -85,12 +91,14 @@ const TheCalendarEvent = ({
                   icon: <RiInboxUnarchiveLine className="!text-base" />,
                 }
               : null,
-            {
-              key: 'delete',
-              label: 'Delete task',
-              danger: true,
-              icon: <RiDeleteBin4Line className="!text-base" />,
-            },
+            readOnlyOccurrence
+              ? null
+              : {
+                  key: 'delete',
+                  label: 'Delete task',
+                  danger: true,
+                  icon: <RiDeleteBin4Line className="!text-base" />,
+                },
           ],
           onClick: ({ key }) => {
             if (key === 'delete') onDeleteTask(savedTask.id)
